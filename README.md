@@ -23,12 +23,22 @@ Explore solutions that allow us to **inject and extend** a React Router v7 proje
 
 The `extensibility-sdk` package serves as the vehicle for these extension points, while `react-router-template` acts as the host application that consumes them.
 
+## Checklist
+
+- [ ] **Route injection** — The SDK should allow extensions to add new routes to the React Router project.
+- [ ] **Global middlewares and loaders** — The SDK should allow extensions to add global middlewares and loaders.
+- [ ] **Context injection** — The SDK should allow extensions to add and inject business logic into the React Router context with functions, utilities, and data.
+- [ ] **Route-specific enhancement** — The SDK should allow extensions to enhance a specific route by injecting middlewares or loaders to that route.
+- [ ] **Client entry customization** — The SDK should allow extensions to customize the client-side entry files.
+- [ ] **Component provision** — The SDK should allow extensions to provide React components that can be consumed in the template.
+
 ## Structure
 
 ```
 ├── packages/
 │   ├── react-router-template/   # The host React Router v7 application (commerce template)
-│   └── extensibility-sdk/       # SDK that provides extension points
+│   ├── extensibility-sdk/       # SDK that provides extension points
+│   └── extension-a/             # Sample extension package
 ├── pnpm-workspace.yaml
 └── package.json
 ```
