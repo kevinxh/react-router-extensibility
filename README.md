@@ -45,3 +45,7 @@ pnpm --filter extensibility-sdk build
 # Start the template dev server
 pnpm dev
 ```
+
+## References
+
+- [React Router Documentation](https://reactrouter.com/home) — the source of truth for how React Router works
