@@ -32,6 +32,10 @@ The `extensibility-sdk` package serves as the vehicle for these extension points
 - [ ] **Client entry customization** — The SDK should allow extensions to customize the client-side entry files.
 - [ ] **Component provision** — The SDK should allow extensions to provide React components that can be consumed in the template.
 
+## Constraints
+
+- The extensibility mechanism must not cause performance degradations.
+
 ## Structure
 
 ```
