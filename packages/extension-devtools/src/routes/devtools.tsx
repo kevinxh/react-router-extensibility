@@ -1179,13 +1179,17 @@ export default function Devtools({
   return (
     <main
       style={{
-        padding: "2rem",
         fontFamily:
           "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-        maxWidth: 900,
-        margin: "0 auto",
         minHeight: "100vh",
         background: C.pageBg,
+      }}
+    >
+    <div
+      style={{
+        maxWidth: 900,
+        margin: "0 auto",
+        padding: "2rem",
       }}
     >
       {/* Header */}
@@ -1352,6 +1356,7 @@ export default function Devtools({
         </h2>
         <FlowDiagram extensions={extensions} contextValues={contextValues} />
       </div>
+    </div>
     </main>
   );
 }
