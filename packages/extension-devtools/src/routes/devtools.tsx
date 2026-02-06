@@ -138,7 +138,7 @@ function ExtensionCard({ ext }: { ext: ExtensionMeta }) {
       <Row label="Routes">
         {ext.routes.length > 0 ? (
           ext.routes.map((r) => (
-            <span key={r.path} style={routeTag}>{r.path}</span>
+            <a key={r.path} href={r.path} style={{ ...routeTag, textDecoration: "none" }}>{r.path}</a>
           ))
         ) : (
           <Dim>None</Dim>
