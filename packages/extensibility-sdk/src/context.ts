@@ -6,13 +6,16 @@ import { createContext } from "react-router";
  */
 export interface ExtensionMeta {
   name: string;
-  capabilities: {
-    routes: boolean;
-    middleware: boolean;
-    routeEnhancements: boolean;
-    components: boolean;
-    clientEntry: boolean;
+  routes: { path: string }[];
+  global: {
+    middleware: string[];
   };
+  routeEnhancements: {
+    route: string;
+    middleware: string[];
+  }[];
+  components: string[];
+  clientEntry: boolean;
 }
 
 /**

@@ -1,6 +1,8 @@
-import { resolve } from "node:path";
+import { resolve, basename, extname } from "node:path";
 import type { ExtensionDefinition } from "./types.js";
 import type { ExtensionMeta } from "./context.js";
+import { relative } from "@react-router/dev/routes";
+import type { RouteConfigEntry } from "@react-router/dev/routes";
 
 /**
  * Generates proxy code for routes.ts that merges template routes with extension routes.
@@ -59,20 +61,80 @@ export function generateRoutesProxy(
 }
 
 /**
+ * Recursively extracts URL paths from route config entries.
+ */
+function extractRoutePaths(
+  entries: RouteConfigEntry[],
+  parentPath = ""
+): string[] {
+  const paths: string[] = [];
+  for (const entry of entries) {
+    if (entry.index) {
+      paths.push(parentPath || "/");
+    } else if (entry.path !== undefined) {
+      const full = parentPath
+        ? `${parentPath}/${entry.path}`
+        : `/${entry.path}`;
+      paths.push(full);
+    }
+    if (entry.children) {
+      const childPrefix = entry.path
+        ? parentPath
+          ? `${parentPath}/${entry.path}`
+          : `/${entry.path}`
+        : parentPath;
+      paths.push(...extractRoutePaths(entry.children, childPrefix));
+    }
+  }
+  return paths;
+}
+
+/**
+ * Extracts a clean display name from a middleware file path.
+ * e.g. "./src/middleware/auth.ts" → "auth"
+ */
+function middlewareName(filePath: string): string {
+  return basename(filePath, extname(filePath));
+}
+
+/**
  * Builds serializable metadata for all extensions.
+ * Calls ext.routes() at build time to extract actual route paths.
  * Used in generated proxy code as an inline JSON literal.
  */
 function buildExtensionsMeta(extensions: ExtensionDefinition[]): ExtensionMeta[] {
-  return extensions.map((ext) => ({
-    name: ext.name,
-    capabilities: {
-      routes: !!ext.routes,
-      middleware: (ext.middleware ?? []).length > 0,
-      routeEnhancements: Object.keys(ext.routeEnhancements ?? {}).length > 0,
-      components: Object.keys(ext.components ?? {}).length > 0,
+  return extensions.map((ext) => {
+    // Extract actual route paths
+    let routes: { path: string }[] = [];
+    if (ext.routes) {
+      const helpers = relative(ext._resolvedDir);
+      const entries = ext.routes(helpers);
+      routes = extractRoutePaths(entries).map((p) => ({ path: p }));
+    }
+
+    // Extract global middleware names
+    const globalMiddleware = (ext.middleware ?? []).map(middlewareName);
+
+    // Extract per-route enhancement details
+    const routeEnhancements = Object.entries(ext.routeEnhancements ?? {}).map(
+      ([route, enhancements]) => ({
+        route,
+        middleware: (enhancements.middleware ?? []).map(middlewareName),
+      })
+    );
+
+    // Extract component names
+    const components = Object.keys(ext.components ?? {});
+
+    return {
+      name: ext.name,
+      routes,
+      global: { middleware: globalMiddleware },
+      routeEnhancements,
+      components,
       clientEntry: !!ext.clientEntry,
-    },
-  }));
+    };
+  });
 }
 
 /**
