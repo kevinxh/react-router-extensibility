@@ -5,6 +5,7 @@ import {
   type ExtensionMeta,
   type ExtensionContextSnapshot,
 } from "extensibility-sdk/context";
+import FlowDiagram from "./flow-diagram";
 
 export function meta() {
   return [
@@ -1854,6 +1855,32 @@ export default function Devtools({
           Module Architecture
         </h2>
         <ModuleArchitectureDiagram extensions={extensions} contextValues={contextValues} />
+      </div>
+
+      {/* Interactive Flow Diagram */}
+      <div
+        style={{
+          marginBottom: 20,
+          background: C.cardBg,
+          border: `1px solid ${C.cardBorder}`,
+          borderRadius: 12,
+          boxShadow: C.shadow,
+          padding: "16px 12px 12px",
+        }}
+      >
+        <h2
+          style={{
+            fontSize: "0.72rem",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            color: C.muted,
+            margin: "0 0 8px 4px",
+          }}
+        >
+          Extension Graph
+        </h2>
+        <FlowDiagram extensions={extensions} contextValues={contextValues} />
       </div>
 
       {/* Extension cards */}

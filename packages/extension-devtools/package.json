@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@xyflow/react": "^12.10.0",
     "extensibility-sdk": "workspace:*"
   },
   "peerDependencies": {
