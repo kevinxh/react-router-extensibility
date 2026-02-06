@@ -175,17 +175,19 @@ function ExtensionCard({
         <p style={{ color: "#777", fontSize: "0.8rem", margin: "0 0 4px" }}>{ext.description}</p>
       )}
 
-      {ext.author && (
-        <div style={{ marginBottom: 4 }}>
-          {ext.author.url ? (
+      <Row label="Author">
+        {ext.author ? (
+          ext.author.url ? (
             <a href={ext.author.url} style={{ fontSize: "0.75rem", color: "#888", textDecoration: "none" }}>
               {ext.author.name}
             </a>
           ) : (
             <span style={{ fontSize: "0.75rem", color: "#888" }}>{ext.author.name}</span>
-          )}
-        </div>
-      )}
+          )
+        ) : (
+          <Dim>None</Dim>
+        )}
+      </Row>
 
       <Row label="Routes">
         {ext.routes.length > 0 ? (
