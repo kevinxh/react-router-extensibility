@@ -23,16 +23,23 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       {currentUser && (
         <div
           style={{
+            margin: "16px auto",
+            maxWidth: 500,
+            fontFamily: "system-ui, sans-serif",
+          }}
+        >
+        <div style={{ fontSize: 11, color: "#94a3b8", fontFamily: "monospace", marginBottom: 4, paddingLeft: 2 }}>
+          Context from <span style={{ color: "#0284c7" }}>extension-auth</span>
+        </div>
+        <div
+          style={{
             background: "#f0f9ff",
             border: "1px solid #bae6fd",
             borderRadius: 8,
             padding: "10px 16px",
-            margin: "16px auto",
-            maxWidth: 500,
             display: "flex",
             alignItems: "center",
             gap: 10,
-            fontFamily: "system-ui, sans-serif",
           }}
         >
           <span
@@ -60,6 +67,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               Role: {currentUser.role} &middot; ID: {currentUser.id}
             </div>
           </div>
+        </div>
         </div>
       )}
       <main className="flex items-center justify-center pt-16 pb-4">
