@@ -633,6 +633,466 @@ function ArchitectureDiagram({ extensions }: { extensions: ExtensionMeta[] }) {
   );
 }
 
+// ── Module Architecture Diagram ──────────────────────────────────────
+
+interface InternalPrimitive {
+  id: string;
+  label: string;
+  colorKey: CapKey;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+const MG = {
+  viewBoxWidth: 860,
+  viewBoxHeight: 400,
+
+  app: {
+    x: 20,
+    y: 20,
+    width: 500,
+    height: 350,
+    radius: 14,
+    headerY: 40,
+    pad: 30,
+  },
+
+  ext: {
+    x: 580,
+    boxWidth: 175,
+    boxHeight: 44,
+    boxRadius: 8,
+    minGap: 10,
+  },
+
+  connection: {
+    strokeWidth: 1.6,
+    strokeWidthHover: 2.6,
+    dimOpacity: 0.08,
+    normalOpacity: 0.5,
+    hoverOpacity: 1,
+  },
+} as const;
+
+// Primitive box positions inside the app container
+const TOP_Y = 62;
+const CTX_Y = 148;
+const BOT_Y = 230;
+const BOX_H = 44;
+const BOX_W_TOP = 130;
+const BOX_W_BOT = 100;
+
+const PRIMITIVES: InternalPrimitive[] = [
+  // Top row: server-side pipeline
+  { id: "server-entry", label: "entry.server", colorKey: "instruments", x: 50,  y: TOP_Y, w: BOX_W_TOP, h: BOX_H },
+  { id: "middleware",    label: "middleware",   colorKey: "middleware",  x: 195, y: TOP_Y, w: BOX_W_TOP, h: BOX_H },
+  { id: "loader",       label: "loader",       colorKey: "middleware",  x: 340, y: TOP_Y, w: BOX_W_TOP, h: BOX_H },
+  // Center: context
+  { id: "context",      label: "context",      colorKey: "context",    x: 165, y: CTX_Y, w: 200, h: 40 },
+  // Bottom row: other capabilities
+  { id: "routes",       label: "routes",       colorKey: "routes",     x: 50,  y: BOT_Y, w: BOX_W_BOT, h: BOX_H },
+  { id: "actions",      label: "actions",      colorKey: "actions",    x: 163, y: BOT_Y, w: BOX_W_BOT, h: BOX_H },
+  { id: "client-entry", label: "entry.client", colorKey: "hooks",      x: 276, y: BOT_Y, w: BOX_W_BOT, h: BOX_H },
+  { id: "instruments",  label: "instruments",  colorKey: "instruments", x: 389, y: BOT_Y, w: BOX_W_BOT, h: BOX_H },
+];
+
+const PRIM_MAP = new Map(PRIMITIVES.map((p) => [p.id, p]));
+
+// Which primitives can access context (shown with internal dotted lines)
+const CONTEXT_ACCESSORS = ["server-entry", "middleware", "loader"];
+
+interface ModuleConnection {
+  primitiveId: string;
+  colorKey: CapKey;
+}
+
+function getModuleConnections(ext: ExtensionMeta): ModuleConnection[] {
+  const conns: ModuleConnection[] = [];
+  if (ext.instrumentations?.server) conns.push({ primitiveId: "server-entry", colorKey: "instruments" });
+  if (ext.global.middleware.length > 0) conns.push({ primitiveId: "middleware", colorKey: "middleware" });
+  if (ext.context) conns.push({ primitiveId: "context", colorKey: "context" });
+  if (ext.actions.length > 0) conns.push({ primitiveId: "actions", colorKey: "actions" });
+  if (ext.routes.length > 0) conns.push({ primitiveId: "routes", colorKey: "routes" });
+  if (ext.routeEnhancements.length > 0) conns.push({ primitiveId: "middleware", colorKey: "middleware" });
+  if (ext.clientHooks?.beforeHydration || ext.clientHooks?.afterHydration)
+    conns.push({ primitiveId: "client-entry", colorKey: "hooks" });
+  if (ext.instrumentations?.client) conns.push({ primitiveId: "instruments", colorKey: "instruments" });
+  return conns;
+}
+
+interface ModExtPositioned {
+  ext: ExtensionMeta;
+  connections: ModuleConnection[];
+  finalY: number;
+  centerY: number;
+}
+
+function layoutModuleExtensions(extensions: ExtensionMeta[]): ModExtPositioned[] {
+  const items = extensions
+    .map((ext) => {
+      const connections = getModuleConnections(ext);
+      if (connections.length === 0) return null;
+      // Compute ideal Y from average Y of connected primitive boxes
+      const avgY =
+        connections.reduce((s, c) => {
+          const p = PRIM_MAP.get(c.primitiveId);
+          return s + (p ? p.y + p.h / 2 : MG.viewBoxHeight / 2);
+        }, 0) / connections.length;
+      return {
+        ext,
+        connections,
+        idealY: avgY - MG.ext.boxHeight / 2,
+        finalY: 0,
+        centerY: 0,
+      };
+    })
+    .filter(Boolean) as (ModExtPositioned & { idealY: number })[];
+
+  items.sort((a, b) => a.idealY - b.idealY);
+
+  for (let i = 0; i < items.length; i++) {
+    if (i === 0) {
+      items[i].finalY = Math.max(MG.app.y + 10, items[i].idealY);
+    } else {
+      const prevBottom = items[i - 1].finalY + MG.ext.boxHeight;
+      items[i].finalY = Math.max(prevBottom + MG.ext.minGap, items[i].idealY);
+    }
+    items[i].centerY = items[i].finalY + MG.ext.boxHeight / 2;
+  }
+
+  return items;
+}
+
+function moduleBezier(prim: InternalPrimitive, extCenterY: number, srcYOffset: number): string {
+  // From app box right edge → extension box left edge
+  const srcX = MG.app.x + MG.app.width;
+  const srcY = prim.y + prim.h / 2 + srcYOffset;
+  const tgtX = MG.ext.x;
+  const tgtY = extCenterY;
+  const gap = tgtX - srcX;
+  const cpOff = gap * 0.4;
+  return `M${srcX},${srcY} C${srcX + cpOff},${srcY} ${tgtX - cpOff},${tgtY} ${tgtX},${tgtY}`;
+}
+
+function ModuleArchitectureDiagram({ extensions }: { extensions: ExtensionMeta[] }) {
+  const [hover, setHover] = useState<HoverTarget>({ type: "none" });
+  const positioned = useMemo(() => layoutModuleExtensions(extensions), [extensions]);
+
+  // Pre-compute connections per primitive for vertical spread
+  const primConnCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of positioned) {
+      for (const c of p.connections) {
+        counts.set(c.primitiveId, (counts.get(c.primitiveId) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [positioned]);
+
+  // Dynamic viewBox height
+  const vbHeight = useMemo(() => {
+    if (positioned.length === 0) return MG.viewBoxHeight;
+    const lastBottom = positioned[positioned.length - 1].finalY + MG.ext.boxHeight;
+    return Math.max(MG.viewBoxHeight, lastBottom + 40);
+  }, [positioned]);
+
+  // Build all connection paths
+  const allConns = useMemo(() => {
+    const primOffsets = new Map<string, number>();
+    const result: {
+      extName: string;
+      primitiveId: string;
+      colorKey: CapKey;
+      path: string;
+    }[] = [];
+
+    for (const p of positioned) {
+      for (const conn of p.connections) {
+        const prim = PRIM_MAP.get(conn.primitiveId);
+        if (!prim) continue;
+        const total = primConnCounts.get(conn.primitiveId) || 1;
+        const idx = primOffsets.get(conn.primitiveId) || 0;
+        primOffsets.set(conn.primitiveId, idx + 1);
+
+        const maxSpread = Math.min(16, prim.h / 2 - 4);
+        let srcYOffset = 0;
+        if (total > 1) {
+          srcYOffset = -maxSpread / 2 + (maxSpread / (total - 1)) * idx;
+        }
+
+        result.push({
+          extName: p.ext.name,
+          primitiveId: conn.primitiveId,
+          colorKey: conn.colorKey,
+          path: moduleBezier(prim, p.centerY, srcYOffset),
+        });
+      }
+    }
+    return result;
+  }, [positioned, primConnCounts]);
+
+  // Opacity helpers
+  function connOp(extName: string, primId: string): number {
+    if (hover.type === "none") return MG.connection.normalOpacity;
+    if (hover.type === "extension" && hover.name === extName) return MG.connection.hoverOpacity;
+    if (hover.type === "stage") {
+      // "stage" reused for primitive hover — index is the index in PRIMITIVES
+      const prim = PRIMITIVES[hover.index];
+      if (prim && prim.id === primId) return MG.connection.hoverOpacity;
+    }
+    return MG.connection.dimOpacity;
+  }
+
+  function primOp(primIdx: number): number {
+    if (hover.type === "none") return 1;
+    if (hover.type === "stage" && hover.index === primIdx) return 1;
+    if (hover.type === "extension") {
+      const p = positioned.find((p) => p.ext.name === hover.name);
+      if (p && p.connections.some((c) => c.primitiveId === PRIMITIVES[primIdx].id)) return 1;
+    }
+    return 0.35;
+  }
+
+  function modExtOp(name: string): number {
+    if (hover.type === "none") return 1;
+    if (hover.type === "extension" && hover.name === name) return 1;
+    if (hover.type === "stage") {
+      const prim = PRIMITIVES[hover.index];
+      if (prim) {
+        const p = positioned.find((p) => p.ext.name === name);
+        if (p && p.connections.some((c) => c.primitiveId === prim.id)) return 1;
+      }
+    }
+    return 0.25;
+  }
+
+  return (
+    <svg
+      viewBox={`0 0 ${MG.viewBoxWidth} ${vbHeight}`}
+      width="100%"
+      style={{ display: "block" }}
+      role="img"
+      aria-label="Module architecture diagram showing extension-to-application relationships"
+      onMouseLeave={() => setHover({ type: "none" })}
+    >
+      <defs>
+        <filter id="mod-shadow" x="-4%" y="-4%" width="108%" height="112%">
+          <feDropShadow dx="0" dy="1" stdDeviation="2" floodOpacity="0.07" />
+        </filter>
+        <style>{`
+          .mod-conn-active { stroke-dasharray: 8 4; animation: dash-march 0.6s linear infinite; }
+        `}</style>
+      </defs>
+
+      {/* Layer 1: Connection bezier curves */}
+      {allConns.map((conn, i) => {
+        const opacity = connOp(conn.extName, conn.primitiveId);
+        const isActive = opacity === MG.connection.hoverOpacity;
+        return (
+          <path
+            key={i}
+            d={conn.path}
+            fill="none"
+            stroke={capColor(conn.colorKey).dot}
+            strokeWidth={isActive ? MG.connection.strokeWidthHover : MG.connection.strokeWidth}
+            opacity={opacity}
+            className={isActive ? "mod-conn-active" : undefined}
+            style={{ transition: "opacity 0.2s, stroke-width 0.2s" }}
+          />
+        );
+      })}
+
+      {/* Layer 2: App container box */}
+      <rect
+        x={MG.app.x}
+        y={MG.app.y}
+        width={MG.app.width}
+        height={MG.app.height}
+        rx={MG.app.radius}
+        fill="#fafbfe"
+        stroke={C.cardBorder}
+        strokeWidth={1.5}
+        strokeDasharray="6 3"
+      />
+      <text
+        x={MG.app.x + 16}
+        y={MG.app.headerY}
+        fontSize={11}
+        fontWeight={600}
+        fontFamily="system-ui, -apple-system, sans-serif"
+        fill={C.secondary}
+        letterSpacing={0.5}
+        style={{ textTransform: "uppercase" }}
+      >
+        Your React Router Application
+      </text>
+
+      {/* Layer 3: Internal "context access" dotted lines */}
+      {CONTEXT_ACCESSORS.map((accId) => {
+        const acc = PRIM_MAP.get(accId);
+        const ctx = PRIM_MAP.get("context");
+        if (!acc || !ctx) return null;
+        const fromX = acc.x + acc.w / 2;
+        const fromY = acc.y + acc.h;
+        const toX = ctx.x + ctx.w / 2;
+        const toY = ctx.y;
+        // Subtle path down then curve to context center
+        const midY = fromY + (toY - fromY) * 0.5;
+        return (
+          <path
+            key={accId}
+            d={`M${fromX},${fromY} C${fromX},${midY} ${toX},${midY} ${toX},${toY}`}
+            fill="none"
+            stroke={C.context.border}
+            strokeWidth={1}
+            strokeDasharray="3 3"
+            opacity={0.5}
+          />
+        );
+      })}
+
+      {/* Layer 4: Internal primitive boxes */}
+      {PRIMITIVES.map((prim, idx) => {
+        const col = capColor(prim.colorKey);
+        const isCtx = prim.id === "context";
+        return (
+          <g
+            key={prim.id}
+            onMouseEnter={() => setHover({ type: "stage", index: idx })}
+            onMouseLeave={() => setHover({ type: "none" })}
+            style={{ cursor: "pointer" }}
+            opacity={primOp(idx)}
+          >
+            <rect
+              x={prim.x}
+              y={prim.y}
+              width={prim.w}
+              height={prim.h}
+              rx={8}
+              fill={isCtx ? col.bg : C.cardBg}
+              stroke={col.border}
+              strokeWidth={isCtx ? 1.5 : 1}
+              filter="url(#mod-shadow)"
+            />
+            {/* Left accent */}
+            {!isCtx && (
+              <rect
+                x={prim.x}
+                y={prim.y + 6}
+                width={3}
+                height={prim.h - 12}
+                rx={1.5}
+                fill={col.dot}
+              />
+            )}
+            <text
+              x={isCtx ? prim.x + prim.w / 2 : prim.x + 14}
+              y={prim.y + prim.h / 2 + 4}
+              fontSize={isCtx ? 11.5 : 11}
+              fontWeight={isCtx ? 700 : 600}
+              fontFamily="ui-monospace, 'SF Mono', 'Cascadia Code', monospace"
+              fill={isCtx ? col.fg : C.text}
+              textAnchor={isCtx ? "middle" : "start"}
+            >
+              {prim.label}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* "accesses context" label */}
+      <text
+        x={PRIM_MAP.get("context")!.x + PRIM_MAP.get("context")!.w / 2}
+        y={CTX_Y - 8}
+        textAnchor="middle"
+        fontSize={8.5}
+        fill={C.muted}
+        fontFamily="system-ui, -apple-system, sans-serif"
+        fontStyle="italic"
+      >
+        accessed by server entry, middleware, loader
+      </text>
+
+      {/* Layer 5: Extension boxes */}
+      {positioned.map((p) => {
+        const displayName = p.ext.name.replace(/^extension-/, "");
+        const uniqueColors = [...new Set(p.connections.map((c) => c.colorKey))];
+        return (
+          <g
+            key={p.ext.name}
+            onMouseEnter={() => setHover({ type: "extension", name: p.ext.name })}
+            onMouseLeave={() => setHover({ type: "none" })}
+            style={{ cursor: "pointer" }}
+            opacity={modExtOp(p.ext.name)}
+          >
+            <rect
+              x={MG.ext.x}
+              y={p.finalY}
+              width={MG.ext.boxWidth}
+              height={MG.ext.boxHeight}
+              rx={MG.ext.boxRadius}
+              fill={C.cardBg}
+              stroke={C.cardBorder}
+              strokeWidth={1}
+              filter="url(#mod-shadow)"
+            />
+            {uniqueColors.map((key, ci) => (
+              <circle
+                key={key}
+                cx={MG.ext.x + MG.ext.boxWidth - 14 - ci * 14}
+                cy={p.finalY + 13}
+                r={4}
+                fill={capColor(key).dot}
+              />
+            ))}
+            <text
+              x={MG.ext.x + 12}
+              y={p.finalY + 28}
+              fontSize={11.5}
+              fontWeight={600}
+              fill={C.text}
+              fontFamily="system-ui, -apple-system, sans-serif"
+            >
+              {displayName}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* No extensions fallback */}
+      {positioned.length === 0 && (
+        <text
+          x={MG.ext.x + MG.ext.boxWidth / 2}
+          y={MG.viewBoxHeight / 2}
+          textAnchor="middle"
+          fontSize={12}
+          fill={C.muted}
+          fontFamily="system-ui, -apple-system, sans-serif"
+          fontStyle="italic"
+        >
+          No extensions installed
+        </text>
+      )}
+
+      {/* Layer 6: Legend */}
+      <g transform={`translate(${MG.app.x + 16}, ${MG.app.y + MG.app.height - 24})`}>
+        <text
+          x={0}
+          y={10}
+          fontSize={8.5}
+          fill={C.muted}
+          fontFamily="system-ui, -apple-system, sans-serif"
+          fontStyle="italic"
+        >
+          Dashed border = application boundary
+        </text>
+      </g>
+    </svg>
+  );
+}
+
 // ── Summary stat card ────────────────────────────────────────────────
 function StatCard({
   icon,
@@ -1283,6 +1743,32 @@ export default function Devtools({
           Architecture
         </h2>
         <ArchitectureDiagram extensions={extensions} />
+      </div>
+
+      {/* Module Architecture Diagram */}
+      <div
+        style={{
+          marginBottom: 20,
+          background: C.cardBg,
+          border: `1px solid ${C.cardBorder}`,
+          borderRadius: 12,
+          boxShadow: C.shadow,
+          padding: "16px 12px 12px",
+        }}
+      >
+        <h2
+          style={{
+            fontSize: "0.72rem",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            color: C.muted,
+            margin: "0 0 8px 4px",
+          }}
+        >
+          Module Architecture
+        </h2>
+        <ModuleArchitectureDiagram extensions={extensions} />
       </div>
 
       {/* Extension cards */}
