@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { RouteConfigEntry } from "@react-router/dev/routes";
 
 export interface RouteHelpers {
@@ -15,6 +17,13 @@ export interface ExtensionAuthor {
 export interface ExtensionDefinition {
   /** Unique name for the extension */
   name: string;
+
+  /**
+   * The extension's entry file URL — pass `import.meta.url`.
+   * All relative paths in the definition are resolved against
+   * the directory containing this file.
+   */
+  dir: string;
 
   /** Semver version string */
   version?: string;
@@ -106,15 +115,20 @@ export interface ExtensionDefinition {
 }
 
 /**
- * Define an extension. The `dir` parameter is the extension's package root directory.
- * All relative paths in the definition are resolved against this directory.
+ * Define an extension. Pass `import.meta.url` as the `dir` field so the SDK
+ * can resolve relative paths (middleware, routes, etc.) from your package root.
+ *
+ * The SDK resolves the package root by going up one directory from the file
+ * containing `import.meta.url` (works for both `src/index.ts` and `dist/index.js`).
  */
 export function defineExtension(
-  dir: string,
   definition: Omit<ExtensionDefinition, "_resolvedDir">
 ): ExtensionDefinition {
+  const resolvedDir = definition.dir.startsWith("file://")
+    ? dirname(dirname(fileURLToPath(definition.dir)))
+    : definition.dir;
   return {
     ...definition,
-    _resolvedDir: dir,
+    _resolvedDir: resolvedDir,
   };
 }

@@ -13,7 +13,14 @@ import extensionGoogleAnalytics from "extension-google-analytics";
 export default defineConfig({
   plugins: [
     tailwindcss(),
-    extensibilityPlugin({ extensions: [extensionAboutPage, extensionAuth, extensionBopis, extensionDevtools, extensionLogging, extensionGoogleAnalytics] }),
+    extensibilityPlugin({ extensions: [
+      extensionAboutPage,
+      extensionAuth,
+      extensionBopis,
+      extensionDevtools,
+      extensionLogging,
+      extensionGoogleAnalytics
+    ]}),
     reactRouter(),
     tsconfigPaths(),
   ],
