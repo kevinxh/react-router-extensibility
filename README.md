@@ -23,26 +23,18 @@ Explore solutions that allow us to **inject and extend** a React Router v7 proje
 
 The `extensibility-sdk` package serves as the vehicle for these extension points, while `react-router-template` acts as the host application that consumes them.
 
-## Checklist
-
-- [ ] **Route injection** — The SDK should allow extensions to add new routes to the React Router project.
-- [ ] **Global middlewares and loaders** — The SDK should allow extensions to add global middlewares and loaders.
-- [ ] **Context injection** — The SDK should allow extensions to add and inject business logic into the React Router context with functions, utilities, and data.
-- [ ] **Route-specific enhancement** — The SDK should allow extensions to enhance a specific route by injecting middlewares or loaders to that route.
-- [ ] **Client entry customization** — The SDK should allow extensions to customize the client-side entry files.
-- [ ] **Component provision** — The SDK should allow extensions to provide React components that can be consumed in the template.
-
-## Constraints
-
-- The extensibility mechanism must not cause performance degradations.
-
 ## Structure
 
 ```
 ├── packages/
-│   ├── react-router-template/   # The host React Router v7 application (commerce template)
-│   ├── extensibility-sdk/       # SDK that provides extension points
-│   └── extension-a/             # Sample extension package
+│   ├── react-router-template/       # Host RR7 application (commerce template)
+│   ├── extensibility-sdk/           # SDK: Vite plugin, codegen, context helpers, route helpers
+│   ├── extension-about-page/        # Demo: route injection (adds /about, /privacy)
+│   ├── extension-auth/              # Demo: context, middleware, actions (auth context + login/logout)
+│   ├── extension-bopis/             # Demo: routes, context, actions (Buy Online Pick Up In Store)
+│   ├── extension-devtools/          # Demo: route injection (devtools dashboard at /__sfnext-devtools)
+│   ├── extension-google-analytics/  # Demo: client hooks (before/after hydration)
+│   └── extension-logging/           # Demo: middleware, server instrumentation (request logging)
 ├── pnpm-workspace.yaml
 └── package.json
 ```
@@ -50,82 +42,286 @@ The `extensibility-sdk` package serves as the vehicle for these extension points
 ## Getting Started
 
 ```bash
-# Install dependencies
 pnpm install
-
-# Build the SDK
-pnpm --filter extensibility-sdk build
-
-# Start the template dev server
-pnpm dev
+pnpm -r --filter '!react-router-template' build   # build the SDK and all extensions
+pnpm dev                                           # start the template dev server
 ```
 
-## Findings: React Router v7 Internals
+---
 
-Key discoveries about RR7 v7.12.0 internals that inform our extensibility approach. These are based on reading `@react-router/dev/dist/vite.js` source code.
+## How It Works
 
-### Route Discovery Pipeline
+### For App Developers
 
-RR7 discovers routes by executing `routes.ts` through its own **isolated vite-node runner** — a separate Vite server created with **`plugins: []`** (no plugins at all). This means:
+To enable extensibility in your React Router v7 project, you need to change three files:
 
-- **Vite plugin `load`/`resolveId`/`transform` hooks cannot intercept `routes.ts`.**
-- The vite-node context is created at `vite.js:132-188`, with `plugins: []` at line 170.
-- Routes are executed at `vite.js:519-520` via `viteNodeContext.runner.executeFile()`.
+#### 1. `vite.config.ts` — register the SDK plugin and list your extensions
 
-**Implication:** Route injection must happen inside `routes.ts` itself (e.g., via `withExtensions()`). There is no way to inject routes purely from a Vite plugin.
+```ts
+import { extensibilityPlugin } from "extensibility-sdk/vite";
+import extensionAuth from "extension-auth";
+import extensionBopis from "extension-bopis";
 
-### Root and Route Module Pipeline
+export default defineConfig({
+  plugins: [
+    extensibilityPlugin({ extensions: [extensionAuth, extensionBopis] }),
+    reactRouter(),
+  ],
+});
+```
 
-Unlike `routes.ts`, actual route modules (`root.tsx`, `routes/home.tsx`, etc.) are loaded through the **normal Vite dev server pipeline** during request handling. Our Vite plugin hooks **do fire** for these modules.
+#### 2. `react-router.config.ts` — enable middleware
 
-Verified by logging — the `load` hook is called for:
-- `app/root.tsx` ✅
-- `app/routes/home.tsx` ✅
-- All other app files ✅
-- `app/routes.ts` ❌
+```ts
+export default { future: { v8_middleware: true } } satisfies Config;
+```
 
-**Implication:** We can use Vite `load` hook proxying to enhance `root.tsx` (global middleware/loaders) and individual route modules (per-route middleware/loaders).
+#### 3. `routes.ts` — wrap your routes with extension routes
 
-### Child Compiler
+```ts
+import { withExtensions } from "extensibility-sdk/routes";
+import extensionAuth from "extension-auth";
+import extensionBopis from "extension-bopis";
 
-RR7 creates a "child compiler" (`vite.js:3391-3426`) during `configResolved`. This child compiler **does include** user plugins (it re-reads the Vite config file and only filters out `react-router*` named plugins). However, the child compiler is used for route module analysis (exports, code splitting), not for route discovery.
+export default withExtensions(
+  [index("routes/home.tsx")],
+  [extensionAuth, extensionBopis]
+) satisfies RouteConfig;
+```
 
-### Middleware API (v8_middleware future flag)
+After initial setup, adding or removing an extension is a one-line change in `vite.config.ts` and `routes.ts`.
 
-Middleware is behind the `v8_middleware` future flag (`vite.js:566`). When enabled:
+#### Reading extension context in your loaders
 
-- Route modules can export `middleware: MiddlewareFunction[]`
-- `MiddlewareFunction = (args, next) => Result`
-- `args.context` is a `RouterContextProvider` with `.get(key)` and `.set(key, value)`
-- `createContext<T>(defaultValue?)` creates typed context keys
-- Middleware is a server-only export (stripped from client bundles)
+Extensions can inject data into the request context (e.g. the current user). Read it in any loader or action:
 
-### Route File Resolution
+```ts
+import { getExtensionContext } from "extensibility-sdk/context";
+import type { AuthContextValue } from "extension-auth/types";
 
-Route config entries have a `file` field. RR7 handles:
+export async function loader({ context }: Route.LoaderArgs) {
+  const auth = getExtensionContext<AuthContextValue>(context, "extension-auth");
+  return { user: auth?.currentUser };
+}
+```
 
-- **Relative paths** — resolved from `appDirectory` (`vite.js:261`)
-- **Absolute paths** — converted to relative via `Path.relative(appDirectory, file)`, then resolved back. Files outside the Vite root are served via `/@fs/` URLs (`vite.js:1344`).
+#### Calling extension actions
 
-**Implication:** Extension route files in `node_modules` work via absolute paths. RR7's `relative()` helper from `@react-router/dev/routes` produces absolute paths scoped to a given directory.
+Extensions can expose server-side functions (e.g. login, logout). Call them from your loaders or actions:
 
-### Entry File Discovery
+```ts
+import { getExtensionActions } from "extensibility-sdk/context";
 
-`root.tsx` is discovered via `findEntry(appDirectory, "root")` — separate from `routes.ts`. It is NOT part of the route config array. It is prepended as a wrapper around all routes at `vite.js:529-535`.
+export async function action({ request, context }: Route.ActionArgs) {
+  const auth = getExtensionActions<AuthActions>(context, "extension-auth");
+  return auth?.login({ email, password });
+}
+```
 
-### Preset API
+---
 
-Presets (`react-router.config.ts` `presets` field) can modify config fields (`ssr`, `future`, `basename`, etc.) but **cannot inject routes**. Route config comes exclusively from `routes.ts`.
+### For Extension Authors
 
-### Summary: What Can/Cannot Be Done From a Vite Plugin
+An extension is a standard npm package that default-exports a `defineExtension()` call. All module paths are relative to the extension's package root.
 
-| Capability | Via Vite Plugin? | Mechanism |
+```ts
+import { defineExtension } from "extensibility-sdk";
+
+export default defineExtension(packageRoot, {
+  name: "my-extension",
+  version: "0.0.1",
+  description: "What this extension does.",
+  ...features
+});
+```
+
+#### Routes
+
+Add new pages to the host application. The `helpers` parameter provides React Router's `route`, `index`, `layout`, and `prefix` functions, scoped to resolve files from your package directory.
+
+```ts
+defineExtension(packageRoot, {
+  routes: ({ route, index }) => [
+    route("stores", "./src/routes/stores.tsx"),
+    route("stores/:storeId", "./src/routes/store-detail.tsx"),
+  ],
+});
+```
+
+#### Global Middleware
+
+Run on every request. Middleware modules are added to `root.tsx`'s middleware array. Each module should default-export a middleware function `(args, next) => Response`.
+
+```ts
+defineExtension(packageRoot, {
+  middleware: ["./src/middleware/auth.ts"],
+});
+```
+
+```ts
+// src/middleware/auth.ts
+export default async function authMiddleware(args, next) {
+  // validate session, set context, etc.
+  return next();
+}
+```
+
+#### Route-Specific Middleware
+
+Target a specific route by its file path (relative to the app's `app/` directory, without extension). The middleware is prepended to that route's middleware array.
+
+```ts
+defineExtension(packageRoot, {
+  routeEnhancements: {
+    "routes/checkout": {
+      middleware: ["./src/middleware/requireAuth.ts"],
+    },
+  },
+});
+```
+
+#### Context
+
+Extensions inject typed data into the request context using `setExtensionContext()`. Declare `context: true` so the SDK captures values for devtools.
+
+```ts
+defineExtension(packageRoot, {
+  context: true,
+  middleware: ["./src/middleware/auth.ts"],
+});
+```
+
+```ts
+// src/middleware/auth.ts
+import { setExtensionContext } from "extensibility-sdk/context";
+
+export default async function authMiddleware(args, next) {
+  const user = await validateSession(args.request);
+  setExtensionContext(args, "my-extension", { currentUser: user });
+  return next();
+}
+```
+
+The app (or other extensions) reads the value with `getExtensionContext<T>(context, "my-extension")`.
+
+#### Actions
+
+Expose server-side functions for the app to call. Each action module should default-export a function.
+
+```ts
+defineExtension(packageRoot, {
+  actions: {
+    login:  { handler: "./src/actions/login.ts", description: "Authenticate user" },
+    logout: { handler: "./src/actions/logout.ts", description: "End session" },
+  },
+});
+```
+
+The app retrieves actions via `getExtensionActions(context, "my-extension")`.
+
+#### Client Hooks
+
+Run code before or after React hydration on the client. Each module should default-export a function (sync or async).
+
+```ts
+defineExtension(packageRoot, {
+  clientHooks: {
+    beforeHydration: "./src/client/beforeHydration.ts",
+    afterHydration:  "./src/client/afterHydration.ts",
+  },
+});
+```
+
+```ts
+// src/client/beforeHydration.ts
+export default function beforeHydration() {
+  // initialize analytics, polyfills, etc.
+}
+```
+
+Hooks run in extension array order. `afterHydration` fires after `hydrateRoot()` is called (React hydration itself is async).
+
+#### Server Instrumentations
+
+Observe server request/response lifecycle using React Router's `unstable_ServerInstrumentation` API. Provides `handler.instrument()` for request-level wrapping and `route.instrument()` for per-route loader/action observation.
+
+```ts
+defineExtension(packageRoot, {
+  instrumentations: {
+    server: "./src/instrumentation/server.ts",
+  },
+});
+```
+
+```ts
+// src/instrumentation/server.ts
+export default {
+  handler(handler) {
+    handler.instrument({
+      request(handleRequest, { request }) {
+        const start = Date.now();
+        return handleRequest().then((result) => {
+          console.log(`${request.method} ${new URL(request.url).pathname} — ${Date.now() - start}ms`);
+          return result;
+        });
+      },
+    });
+  },
+  route(route) {
+    route.instrument({
+      loader(callLoader) {
+        const start = Date.now();
+        return callLoader().then((result) => {
+          console.log(`loader ${route.id} — ${Date.now() - start}ms`);
+          return result;
+        });
+      },
+    });
+  },
+};
+```
+
+---
+
+### Under the Hood
+
+The SDK works by leveraging React Router's fundamental design: **behavior is defined through module exports**. Route modules export `loader`, `middleware`, `action`, `default` (component), etc. Entry files export hydration logic and instrumentations. The SDK intercepts these modules at the Vite level and composes extension code into them — without modifying any source files.
+
+#### Module Proxying
+
+The SDK's Vite plugin intercepts core React Router modules (`root.tsx`, route modules, `entry.client`, `entry.server`) at load time. Instead of returning the original file, it returns a **generated proxy module** that:
+
+1. Re-exports everything from the original file (preserving the app's existing code)
+2. Overrides specific exports with composed versions that include extension code
+
+For example, when Vite loads `root.tsx`, the SDK returns a proxy that re-exports the app's component, links, and layout — but replaces the `middleware` export with a composed array containing both extension middleware and the app's original middleware.
+
+The same pattern applies to individual route modules (for per-route middleware), `entry.client` (for hydration hooks), and `entry.server` (for instrumentations).
+
+#### Route Merging
+
+Route injection uses a different mechanism because React Router's route discovery pipeline does not go through the standard Vite plugin pipeline. Instead, the `withExtensions()` helper is called directly in `routes.ts` — it takes the app's route config array and each extension's route definitions, and returns a merged array.
+
+### SDK Exports
+
+| Import path | Purpose |
+|---|---|
+| `extensibility-sdk` | `defineExtension()`, type exports |
+| `extensibility-sdk/vite` | `extensibilityPlugin()` — Vite plugin for the host app |
+| `extensibility-sdk/routes` | `withExtensions()` — route merging for `routes.ts` |
+| `extensibility-sdk/context` | `setExtensionContext()`, `getExtensionContext()`, `getExtensionActions()` |
+| `extensibility-sdk/logger` | `createLogger()` — formatted terminal logging for extensions |
+
+### Example Extensions
+
+| Extension | Features Used | Description |
 |---|---|---|
-| Inject routes | No | Must use `withExtensions()` in `routes.ts` |
-| Enhance `root.tsx` (global middleware/loaders) | Yes | `load` hook proxy |
-| Enhance route modules (per-route middleware/loaders) | Yes | `load` hook proxy |
-| Provide virtual modules (components, client entry) | Yes | `resolveId` + `load` hooks |
-| Enable `v8_middleware` flag | No | Must set in `react-router.config.ts` directly |
+| `extension-about-page` | Routes | Adds `/about` and `/privacy` pages |
+| `extension-auth` | Context, middleware, actions | Injects auth context, provides login/logout/getSession actions |
+| `extension-bopis` | Routes, context, middleware, actions | Store finder with inventory checking |
+| `extension-devtools` | Routes | Dashboard at `/__sfnext-devtools` showing all installed extensions |
+| `extension-google-analytics` | Client hooks | Runs GA initialization before/after hydration |
+| `extension-logging` | Middleware, server instrumentations | Request logging with timing for loaders/actions |
 
 ## References
 
