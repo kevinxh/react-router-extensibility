@@ -706,20 +706,56 @@ const CONTEXT_ACCESSORS = ["server-entry", "middleware", "loader"];
 interface ModuleConnection {
   primitiveId: string;
   colorKey: CapKey;
+  details: string[]; // specific items provided (action names, route paths, etc.)
 }
 
-function getModuleConnections(ext: ExtensionMeta): ModuleConnection[] {
+function getModuleConnections(
+  ext: ExtensionMeta,
+  contextValues: ExtensionContextSnapshot[],
+): ModuleConnection[] {
   const conns: ModuleConnection[] = [];
-  if (ext.instrumentations?.server) conns.push({ primitiveId: "server-entry", colorKey: "instruments" });
-  if (ext.global.middleware.length > 0) conns.push({ primitiveId: "middleware", colorKey: "middleware" });
-  if (ext.context) conns.push({ primitiveId: "context", colorKey: "context" });
-  if (ext.actions.length > 0) conns.push({ primitiveId: "actions", colorKey: "actions" });
-  if (ext.routes.length > 0) conns.push({ primitiveId: "routes", colorKey: "routes" });
-  if (ext.routeEnhancements.length > 0) conns.push({ primitiveId: "middleware", colorKey: "middleware" });
-  if (ext.clientHooks?.beforeHydration || ext.clientHooks?.afterHydration)
-    conns.push({ primitiveId: "client-entry", colorKey: "hooks" });
-  if (ext.instrumentations?.client) conns.push({ primitiveId: "instruments", colorKey: "instruments" });
+  if (ext.instrumentations?.server)
+    conns.push({ primitiveId: "server-entry", colorKey: "instruments", details: ["server"] });
+  if (ext.global.middleware.length > 0)
+    conns.push({ primitiveId: "middleware", colorKey: "middleware", details: ext.global.middleware });
+  if (ext.context) {
+    // Extract top-level keys from the runtime context snapshot
+    const snap = contextValues.find((cv) => cv.extension === ext.name);
+    let keys: string[] = [];
+    if (snap && typeof snap.value === "object" && snap.value !== null) {
+      keys = Object.keys(snap.value as Record<string, unknown>);
+    }
+    conns.push({ primitiveId: "context", colorKey: "context", details: keys.length > 0 ? keys : ["(context)"] });
+  }
+  if (ext.actions.length > 0)
+    conns.push({ primitiveId: "actions", colorKey: "actions", details: ext.actions.map((a) => a.name) });
+  if (ext.routes.length > 0)
+    conns.push({ primitiveId: "routes", colorKey: "routes", details: ext.routes.map((r) => r.path) });
+  if (ext.routeEnhancements.length > 0) {
+    const names = ext.routeEnhancements.flatMap((e) => e.middleware);
+    conns.push({ primitiveId: "middleware", colorKey: "middleware", details: names.length > 0 ? names : ["(route MW)"] });
+  }
+  if (ext.clientHooks?.beforeHydration || ext.clientHooks?.afterHydration) {
+    const hooks: string[] = [];
+    if (ext.clientHooks.beforeHydration) hooks.push("beforeHydration");
+    if (ext.clientHooks.afterHydration) hooks.push("afterHydration");
+    conns.push({ primitiveId: "client-entry", colorKey: "hooks", details: hooks });
+  }
+  if (ext.instrumentations?.client)
+    conns.push({ primitiveId: "instruments", colorKey: "instruments", details: ["client"] });
   return conns;
+}
+
+// Compute the midpoint of a cubic bezier at t=0.5
+function bezierMidpoint(path: string): { x: number; y: number } {
+  // Parse "Mx0,y0 Cx1,y1 x2,y2 x3,y3"
+  const nums = path.match(/-?[\d.]+/g)?.map(Number) || [];
+  const [x0, y0, x1, y1, x2, y2, x3, y3] = nums;
+  // Cubic bezier at t=0.5: B(0.5) = 0.125*P0 + 0.375*P1 + 0.375*P2 + 0.125*P3
+  return {
+    x: 0.125 * x0 + 0.375 * x1 + 0.375 * x2 + 0.125 * x3,
+    y: 0.125 * y0 + 0.375 * y1 + 0.375 * y2 + 0.125 * y3,
+  };
 }
 
 interface ModExtPositioned {
@@ -729,10 +765,10 @@ interface ModExtPositioned {
   centerY: number;
 }
 
-function layoutModuleExtensions(extensions: ExtensionMeta[]): ModExtPositioned[] {
+function layoutModuleExtensions(extensions: ExtensionMeta[], contextValues: ExtensionContextSnapshot[]): ModExtPositioned[] {
   const items = extensions
     .map((ext) => {
-      const connections = getModuleConnections(ext);
+      const connections = getModuleConnections(ext, contextValues);
       if (connections.length === 0) return null;
       // Compute ideal Y from average Y of connected primitive boxes
       const avgY =
@@ -776,9 +812,15 @@ function moduleBezier(prim: InternalPrimitive, extCenterY: number, srcYOffset: n
   return `M${srcX},${srcY} C${srcX + cpOff},${srcY} ${tgtX - cpOff},${tgtY} ${tgtX},${tgtY}`;
 }
 
-function ModuleArchitectureDiagram({ extensions }: { extensions: ExtensionMeta[] }) {
+function ModuleArchitectureDiagram({
+  extensions,
+  contextValues,
+}: {
+  extensions: ExtensionMeta[];
+  contextValues: ExtensionContextSnapshot[];
+}) {
   const [hover, setHover] = useState<HoverTarget>({ type: "none" });
-  const positioned = useMemo(() => layoutModuleExtensions(extensions), [extensions]);
+  const positioned = useMemo(() => layoutModuleExtensions(extensions, contextValues), [extensions, contextValues]);
 
   // Pre-compute connections per primitive for vertical spread
   const primConnCounts = useMemo(() => {
@@ -806,6 +848,7 @@ function ModuleArchitectureDiagram({ extensions }: { extensions: ExtensionMeta[]
       primitiveId: string;
       colorKey: CapKey;
       path: string;
+      details: string[];
     }[] = [];
 
     for (const p of positioned) {
@@ -827,6 +870,7 @@ function ModuleArchitectureDiagram({ extensions }: { extensions: ExtensionMeta[]
           primitiveId: conn.primitiveId,
           colorKey: conn.colorKey,
           path: moduleBezier(prim, p.centerY, srcYOffset),
+          details: conn.details,
         });
       }
     }
@@ -1076,7 +1120,48 @@ function ModuleArchitectureDiagram({ extensions }: { extensions: ExtensionMeta[]
         </text>
       )}
 
-      {/* Layer 6: Legend */}
+      {/* Layer 6: Connection detail annotations (shown on hover) */}
+      {allConns.map((conn, i) => {
+        const opacity = connOp(conn.extName, conn.primitiveId);
+        const isActive = opacity === MG.connection.hoverOpacity;
+        if (!isActive || conn.details.length === 0) return null;
+
+        const mid = bezierMidpoint(conn.path);
+        const col = capColor(conn.colorKey);
+        // Compact label: join details, truncate if too long
+        const label = conn.details.length <= 3
+          ? conn.details.join(", ")
+          : conn.details.slice(0, 3).join(", ") + ` +${conn.details.length - 3}`;
+        const labelWidth = Math.min(label.length * 5.5 + 14, 160);
+
+        return (
+          <g key={`ann-${i}`}>
+            <rect
+              x={mid.x - labelWidth / 2}
+              y={mid.y - 10}
+              width={labelWidth}
+              height={18}
+              rx={4}
+              fill={col.bg}
+              stroke={col.border}
+              strokeWidth={0.8}
+            />
+            <text
+              x={mid.x}
+              y={mid.y + 3}
+              textAnchor="middle"
+              fontSize={8.5}
+              fontWeight={600}
+              fontFamily="ui-monospace, 'SF Mono', 'Cascadia Code', monospace"
+              fill={col.fg}
+            >
+              {label}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Layer 7: Legend */}
       <g transform={`translate(${MG.app.x + 16}, ${MG.app.y + MG.app.height - 24})`}>
         <text
           x={0}
@@ -1768,7 +1853,7 @@ export default function Devtools({
         >
           Module Architecture
         </h2>
-        <ModuleArchitectureDiagram extensions={extensions} />
+        <ModuleArchitectureDiagram extensions={extensions} contextValues={contextValues} />
       </div>
 
       {/* Extension cards */}
