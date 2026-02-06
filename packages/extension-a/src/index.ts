@@ -11,4 +11,10 @@ export default defineExtension(packageRoot, {
   routes: ({ route }) => [route("about", "./src/routes/about.tsx")],
 
   middleware: ["./src/middleware/logging.ts"],
+
+  routeEnhancements: {
+    "routes/home": {
+      middleware: ["./src/middleware/analytics.ts"],
+    },
+  },
 });

@@ -138,6 +138,61 @@ function buildExtensionsMeta(extensions: ExtensionDefinition[]): ExtensionMeta[]
 }
 
 /**
+ * Generates proxy code for a route module that injects per-route middleware from extensions.
+ *
+ * Uses explicit re-exports instead of `export *` because RR7's es-module-lexer
+ * cannot resolve `export *` to concrete names — causing `hasLoader: false` etc.
+ *
+ * @param originalExports - named exports detected in the original source file
+ */
+export function generateRouteProxy(
+  originalPath: string,
+  middlewarePaths: string[],
+  originalExports: string[]
+): string {
+  const lines: string[] = [];
+
+  // Explicitly re-export original's named exports (except middleware, which we override)
+  const reexports = originalExports.filter((name) => name !== "middleware");
+  if (reexports.length > 0) {
+    lines.push(
+      `export { ${reexports.join(", ")} } from "${originalPath}?ext-original";`
+    );
+  }
+
+  // Use `export default` declaration instead of `export { default } from "..."`
+  // because RR7's vite plugin has a transform (decorateComponentExportsWithProps)
+  // that wraps ExportDefaultDeclaration nodes with withComponentProps(). A re-export
+  // like `export { default }` doesn't produce an ExportDefaultDeclaration AST node,
+  // so the transform would skip it and loaderData/params props would be undefined.
+  lines.push(
+    `import _Default from "${originalPath}?ext-original";`,
+    `export default _Default;`
+  );
+  lines.push(``);
+
+  // Import namespace to access original middleware if it exists
+  lines.push(`import * as _original from "${originalPath}?ext-original";`);
+  lines.push(``);
+
+  // Import extension middleware files
+  const mwVars: string[] = [];
+  for (let i = 0; i < middlewarePaths.length; i++) {
+    const varName = `_mw${i}`;
+    lines.push(`import ${varName} from "${middlewarePaths[i]}";`);
+    mwVars.push(varName);
+  }
+
+  lines.push(``);
+
+  // Compose middleware: extension middleware first, then original
+  const all = [...mwVars, `...(_original.middleware ?? [])`];
+  lines.push(`export const middleware = [${all.join(", ")}];`);
+
+  return lines.join("\n");
+}
+
+/**
  * Generates proxy code for root.tsx that injects global middleware from extensions.
  *
  * The proxy:
@@ -153,7 +208,10 @@ export function generateRootProxy(
 ): string {
   const lines: string[] = [];
 
-  // Re-export everything from original (middleware will be overridden below)
+  // Re-export everything from original (middleware will be overridden below).
+  // We use `export *` here because root.tsx has non-standard exports like `Layout`
+  // that aren't in the known route exports list. This is safe because root.tsx
+  // typically doesn't export `loader`, so the es-module-lexer issue doesn't apply.
   lines.push(
     `export * from "${originalPath}?ext-original";`,
     `export { default } from "${originalPath}?ext-original";`,
