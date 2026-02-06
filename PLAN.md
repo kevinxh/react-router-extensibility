@@ -52,8 +52,9 @@ withExtensions([...templateRoutes], [extensionA])
 ## Extension Definition API
 
 ```ts
-export default defineExtension(packageRoot, {
+export default defineExtension({
   name: "extension-a",
+  dir: import.meta.url,
   routes: ({ route }) => [route("about", "./src/routes/about.tsx")],
   middleware: ["./src/middleware/auth.ts"],
   routeEnhancements: {
@@ -190,4 +191,4 @@ const auth = getExtensionContext<AuthContextValue>(context, "extension-auth");
 2. **`?ext-original` query param** — standard Vite pattern for load hook recursion breaking.
 3. **Three template files** — `vite.config.ts`, `react-router.config.ts`, `routes.ts`. After setup, extensions are added/removed in `vite.config.ts` and `routes.ts`.
 4. **Absolute paths** — extension files referenced by absolute path in proxy code. Vite resolves via `/@fs/`.
-5. **`defineExtension(dir, def)`** — explicit directory for resolving relative paths.
+5. **`defineExtension({ dir: import.meta.url, ... })`** — `dir` field resolves relative paths from the package root.

@@ -128,13 +128,14 @@ export async function action({ request, context }: Route.ActionArgs) {
 
 ### For Extension Authors
 
-An extension is a standard npm package that default-exports a `defineExtension()` call. All module paths are relative to the extension's package root.
+An extension is a standard npm package that default-exports a `defineExtension()` call. Pass `import.meta.url` as the `dir` field so the SDK can resolve relative module paths from your package root.
 
 ```ts
 import { defineExtension } from "extensibility-sdk";
 
-export default defineExtension(packageRoot, {
+export default defineExtension({
   name: "my-extension",
+  dir: import.meta.url,
   version: "0.0.1",
   description: "What this extension does.",
   ...features
@@ -146,7 +147,7 @@ export default defineExtension(packageRoot, {
 Add new pages to the host application. The `helpers` parameter provides React Router's `route`, `index`, `layout`, and `prefix` functions, scoped to resolve files from your package directory.
 
 ```ts
-defineExtension(packageRoot, {
+defineExtension({
   routes: ({ route, index }) => [
     route("stores", "./src/routes/stores.tsx"),
     route("stores/:storeId", "./src/routes/store-detail.tsx"),
@@ -159,7 +160,7 @@ defineExtension(packageRoot, {
 Run on every request. Middleware modules are added to `root.tsx`'s middleware array. Each module should default-export a middleware function `(args, next) => Response`.
 
 ```ts
-defineExtension(packageRoot, {
+defineExtension({
   middleware: ["./src/middleware/auth.ts"],
 });
 ```
@@ -177,7 +178,7 @@ export default async function authMiddleware(args, next) {
 Target a specific route by its file path (relative to the app's `app/` directory, without extension). The middleware is prepended to that route's middleware array.
 
 ```ts
-defineExtension(packageRoot, {
+defineExtension({
   routeEnhancements: {
     "routes/checkout": {
       middleware: ["./src/middleware/requireAuth.ts"],
@@ -191,7 +192,7 @@ defineExtension(packageRoot, {
 Extensions inject typed data into the request context using `setExtensionContext()`. Declare `context: true` so the SDK captures values for devtools.
 
 ```ts
-defineExtension(packageRoot, {
+defineExtension({
   context: true,
   middleware: ["./src/middleware/auth.ts"],
 });
@@ -215,7 +216,7 @@ The app (or other extensions) reads the value with `getExtensionContext<T>(conte
 Expose server-side functions for the app to call. Each action module should default-export a function.
 
 ```ts
-defineExtension(packageRoot, {
+defineExtension({
   actions: {
     login:  { handler: "./src/actions/login.ts", description: "Authenticate user" },
     logout: { handler: "./src/actions/logout.ts", description: "End session" },
@@ -230,7 +231,7 @@ The app retrieves actions via `getExtensionActions(context, "my-extension")`.
 Run code before or after React hydration on the client. Each module should default-export a function (sync or async).
 
 ```ts
-defineExtension(packageRoot, {
+defineExtension({
   clientHooks: {
     beforeHydration: "./src/client/beforeHydration.ts",
     afterHydration:  "./src/client/afterHydration.ts",
@@ -252,7 +253,7 @@ Hooks run in extension array order. `afterHydration` fires after `hydrateRoot()`
 Observe server request/response lifecycle using React Router's `unstable_ServerInstrumentation` API. Provides `handler.instrument()` for request-level wrapping and `route.instrument()` for per-route loader/action observation.
 
 ```ts
-defineExtension(packageRoot, {
+defineExtension({
   instrumentations: {
     server: "./src/instrumentation/server.ts",
   },
