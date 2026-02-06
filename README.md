@@ -14,14 +14,20 @@ The typical approach — adding source code directly into the React Router proje
 
 ## Goal
 
-Explore solutions that allow us to **inject and extend** a React Router v7 project programmatically, specifically by leveraging the APIs that React Router provides:
+Explore solutions that allow us to **inject and extend** a React Router v7 project programmatically. Instead of inventing parallel systems, the extensibility model is built directly on top of React Router's own primitives. The `extensibility-sdk` package serves as the composition layer, while `react-router-template` acts as the host application that consumes extensions.
 
-- **Context** — sharing data and services across the application
-- **Loaders** — extending data loading with SDK-provided logic
-- **Middlewares** — intercepting and augmenting request/response handling
-- **Routes** — programmatic route injection and modification
+## Extension Capabilities
 
-The `extensibility-sdk` package serves as the vehicle for these extension points, while `react-router-template` acts as the host application that consumes them.
+Every capability maps to a React Router primitive. Extensions can use any combination of these:
+
+| Capability | Description | RR7 Primitive |
+|---|---|---|
+| **Routes** | Inject new pages into the host application | Route config (`routes.ts`) |
+| **Middleware** | Run code on every request (global) or on specific routes | Middleware (`root.tsx` / route modules) |
+| **Context** | Share typed data across the request lifecycle, readable by any loader or action | React Router context (`context.set()` / `context.get()`) |
+| **Actions** | Expose server-side functions that the app can call from loaders and actions | Context-based function registry |
+| **Client Hooks** | Run code before or after React hydration on the client | Client entry (`entry.client.tsx`) |
+| **Instrumentations** | Observe the server request/response lifecycle for logging, tracing, APM | `unstable_ServerInstrumentation` (`entry.server.tsx`) |
 
 ## Structure
 
