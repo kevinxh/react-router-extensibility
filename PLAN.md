@@ -2,203 +2,89 @@
 
 ## Approach
 
-Vite plugin that wires extensions into a React Router v7 app at build time. One unified mechanism for all extension points. Incremental phases — each produces a working, verifiable result.
+Vite plugin + `withExtensions()` helper for route injection. Two mechanisms based on what RR7 allows (see README "Findings" section):
+
+- **Route injection** → `withExtensions()` in `routes.ts` (RR7's vite-node uses `plugins: []`, so our Vite hooks can't intercept it)
+- **Module enhancement** (root.tsx, route modules) → Vite `load` hook proxy with `?ext-original` recursion breaker
 
 ---
 
-## Core Mechanism: `load` Hook Module Proxying
+## Core Mechanisms
 
-A single Vite plugin pattern handles everything — route injection, global middleware, route-specific enhancement. The plugin intercepts module loading via the `load` hook and returns proxy code that composes extension behavior with the original module.
+### 1. `withExtensions()` for Route Injection
 
-### How it works
-
-```
-Vite loads a target module (routes.ts, root.tsx, or a route file)
-  → load hook intercepts → returns generated proxy code
-    → proxy imports original module via "?ext-original" query param
-    → proxy composes extension middleware/loaders/routes with original exports
-    → ?ext-original import hits load hook again → query param detected → skip → real file loaded
-```
-
-### The `?ext-original` recursion breaker
-
-When the proxy imports the original module, it appends `?ext-original` to the import path. The load hook checks for this query param and skips interception, letting Vite load the real file from disk.
+Used in `routes.ts` because RR7's route discovery pipeline is an isolated vite-node with zero plugins. This is the only way to inject routes.
 
 ```ts
-load(id) {
-  if (id.includes("?ext-original")) return null;  // load real file
-
-  const cleanId = id.split("?")[0];
-  if (cleanId === routesTsPath)       return generateRoutesProxy();
-  if (cleanId === rootTsxPath)        return generateRootProxy();
-  if (enhancedRoutes.has(cleanId))    return generateRouteProxy(cleanId);
-}
-
-resolveId(source) {
-  // Ensure ?ext-original imports resolve to the actual file
-  if (source.includes("?ext-original")) {
-    return source.split("?")[0] + "?ext-original";
-  }
-}
-```
-
-### Why `load` hook (not `resolveId`)
-
-- RR7 executes `routes.ts` via `viteNodeRunner.executeFile()` — `load` is always called to get module content, but `resolveId` may not fire for the entry file
-- `load` fires for all modules: entry files, imported modules, everything
-- Unified — same hook handles routes.ts, root.tsx, and route modules
-
-### What gets proxied
-
-| Target | What the proxy does |
-|---|---|
-| **`routes.ts`** | Imports original routes + extension routes, exports merged array |
-| **`root.tsx`** | `export *` from original, overrides `middleware`/`loader` with composed versions |
-| **Route modules** (e.g. `routes/home.tsx`) | `export *` from original, overrides `middleware`/`loader` with composed versions |
-
-### Template setup (one-time, two files)
-
-Only two template files need modification. After this, extensions are added/removed by editing the `extensions` array in `vite.config.ts`.
-
-```ts
-// vite.config.ts — add SDK plugin
-import { extensibilityPlugin } from "extensibility-sdk/vite";
+// Template's routes.ts
+import { withExtensions } from "extensibility-sdk/routes";
 import extensionA from "extension-a";
 
-export default defineConfig({
-  plugins: [
-    extensibilityPlugin({ extensions: [extensionA] }),
-    reactRouter(),
-  ],
-});
+export default withExtensions([index("routes/home.tsx")], [extensionA]);
 ```
+
+### 2. `load` Hook Proxy for Module Enhancement
+
+Used for `root.tsx` (global middleware) and route modules (per-route middleware). These go through the real Vite pipeline where our hooks fire.
+
+```
+Vite loads root.tsx or a route module
+  → load hook intercepts → returns proxy code
+    → proxy: export * from "original?ext-original" + override middleware/loader
+    → ?ext-original hits load hook → query param detected → skip → real file loaded
+```
+
+### Template Setup (one-time, three files)
 
 ```ts
-// react-router.config.ts — enable middleware
-export default {
-  ssr: true,
-  future: { v8_middleware: true },
-} satisfies Config;
-```
+// 1. vite.config.ts — add SDK plugin
+extensibilityPlugin({ extensions: [extensionA] })
 
-No changes to `routes.ts`, `root.tsx`, or any route files.
+// 2. react-router.config.ts — enable middleware
+future: { v8_middleware: true }
+
+// 3. routes.ts — wrap routes
+withExtensions([...templateRoutes], [extensionA])
+```
 
 ---
 
 ## Extension Definition API
 
 ```ts
-import { defineExtension } from "extensibility-sdk";
-
-export default defineExtension(import.meta.dirname, {
+export default defineExtension(packageRoot, {
   name: "extension-a",
-
-  // Route injection — callback receives RR7 helpers scoped to this package's directory
-  routes: ({ route, index }) => [
-    route("about", "./routes/about.tsx"),
-  ],
-
-  // Global middleware/loaders — module paths relative to this package
-  middleware: ["./middleware/auth.ts"],
-  // loaders: ["./loaders/global-data.ts"],  (future)
-
-  // Route-specific enhancements — keyed by route file path
+  routes: ({ route }) => [route("about", "./src/routes/about.tsx")],
+  middleware: ["./src/middleware/auth.ts"],
   routeEnhancements: {
-    "routes/home": {
-      middleware: ["./middleware/analytics.ts"],
-    },
+    "routes/home": { middleware: ["./src/middleware/analytics.ts"] },
   },
-
-  // Components — provided via virtual module
-  components: {
-    LoyaltyBanner: "./components/LoyaltyBanner.tsx",
-  },
-
-  // Client entry — wraps the app at hydration
-  clientEntry: {
-    wrapApp: "./client/wrap-app.tsx",
-  },
+  components: { LoyaltyBanner: "./src/components/LoyaltyBanner.tsx" },
+  clientEntry: { wrapApp: "./src/client/wrap-app.tsx" },
 });
 ```
-
-`defineExtension(dir, definition)` takes the extension's directory as the first argument. All relative paths in the definition are resolved against this directory when the Vite plugin generates proxy code.
-
----
-
-## Generated Proxy Examples
-
-### routes.ts proxy
-
-```ts
-// Generated by extensibility-sdk
-import originalRoutes from "/abs/path/app/routes.ts?ext-original";
-import { relative } from "@react-router/dev/routes";
-
-const _extA = relative("/abs/path/to/extension-a/src");
-
-export default [
-  ...originalRoutes,
-  _extA.route("about", "./routes/about.tsx"),
-];
-```
-
-### root.tsx proxy
-
-```tsx
-// Generated by extensibility-sdk
-export * from "/abs/path/app/root.tsx?ext-original";
-export { default } from "/abs/path/app/root.tsx?ext-original";
-
-import * as _original from "/abs/path/app/root.tsx?ext-original";
-import { middleware as _extA_auth } from "/abs/path/extension-a/src/middleware/auth.ts";
-
-export const middleware = [
-  _extA_auth,
-  ...(_original.middleware ?? []),
-];
-```
-
-### Route module proxy (e.g. routes/home.tsx)
-
-```tsx
-// Generated by extensibility-sdk
-export * from "/abs/path/app/routes/home.tsx?ext-original";
-export { default } from "/abs/path/app/routes/home.tsx?ext-original";
-
-import * as _original from "/abs/path/app/routes/home.tsx?ext-original";
-import { middleware as _analytics } from "/abs/path/extension-a/src/middleware/analytics.ts";
-
-export const middleware = [
-  _analytics,
-  ...(_original.middleware ?? []),
-];
-```
-
-All three use the same pattern: import original via `?ext-original`, compose, re-export.
 
 ---
 
 ## Phase 1: Vite Plugin + Route Injection
 
-**Goal:** Extension adds a route. Visit `/about` and see the extension's page. Proves the `load` hook proxy mechanism works.
+**Goal:** Extension adds a route. Visit `/about` and see the extension's page.
 
-### What we build
+**Status: In progress.** SDK core built. Extension-a built. Template integration in progress.
 
-| Package | File | Action |
-|---|---|---|
-| `extensibility-sdk` | `package.json` | Add peer deps (`react-router`, `@react-router/dev`, `vite`), exports map, build tooling |
-| `extensibility-sdk` | `tsconfig.json` | Update for multiple entry points, JSX |
-| `extensibility-sdk` | `src/types.ts` | Create — `ExtensionDefinition`, `defineExtension()` |
-| `extensibility-sdk` | `src/vite-plugin.ts` | Create — Vite plugin with `load` + `resolveId` hooks, `config` hook |
-| `extensibility-sdk` | `src/codegen.ts` | Create — `generateRoutesProxy()` |
-| `extensibility-sdk` | `src/index.ts` | Update — re-export public API |
-| `extension-a` | `package.json` | Add deps, exports |
-| `extension-a` | `tsconfig.json` | Enable JSX |
-| `extension-a` | `src/index.ts` | Update — `defineExtension()` with one route |
-| `extension-a` | `src/routes/about.tsx` | Create — simple page component |
-| `react-router-template` | `package.json` | Add `extension-a` dep |
-| `react-router-template` | `vite.config.ts` | Add `extensibilityPlugin()` |
-| `react-router-template` | `react-router.config.ts` | Add `v8_middleware: true` |
+| Package | File | Action | Status |
+|---|---|---|---|
+| `extensibility-sdk` | `src/types.ts` | `ExtensionDefinition`, `defineExtension()` | Done |
+| `extensibility-sdk` | `src/vite-plugin.ts` | Vite plugin skeleton | Done |
+| `extensibility-sdk` | `src/codegen.ts` | `generateRoutesProxy()` | Done (unused for Phase 1) |
+| `extensibility-sdk` | `src/routes.ts` | `withExtensions()` | Done |
+| `extensibility-sdk` | `package.json` | Peer deps, exports map | Done |
+| `extension-a` | `src/index.ts` | `defineExtension()` with route | Done |
+| `extension-a` | `src/routes/about.tsx` | Sample page | Done |
+| `react-router-template` | `vite.config.ts` | Add `extensibilityPlugin()` | Done |
+| `react-router-template` | `react-router.config.ts` | `v8_middleware: true` | Done |
+| `react-router-template` | `package.json` | Add `extension-a` dep | Done |
+| `react-router-template` | `app/routes.ts` | Use `withExtensions()` | **TODO** |
 
 ### Verify
 
@@ -212,96 +98,59 @@ pnpm --filter react-router-template dev
 
 ## Phase 2: Global Middleware + Context Injection
 
-**Goal:** Extension adds global middleware to `root.tsx` that runs on every request. Extension injects typed context accessible in loaders.
-
-### What we build
+**Goal:** Extension adds global middleware to `root.tsx` via load hook proxy. Extension injects typed context.
 
 | Package | File | Action |
 |---|---|---|
 | `extensibility-sdk` | `src/codegen.ts` | Add `generateRootProxy()` |
-| `extensibility-sdk` | `src/vite-plugin.ts` | Update — proxy root.tsx via `load` hook |
-| `extensibility-sdk` | `src/context.ts` | Create — `createContextMiddleware()`, re-export `createContext` |
-| `extension-a` | `src/middleware/auth.ts` | Create — global middleware (logs requests) |
-| `extension-a` | `src/middleware/context.ts` | Create — context middleware (injects typed value) |
-| `extension-a` | `src/index.ts` | Update — add `middleware` field |
-| `react-router-template` | `app/routes/home.tsx` | Update — loader reads context, renders value |
-
-### Verify
-
-```bash
-# Visit any route → server console shows auth middleware log
-# Home page displays context value injected by extension
-```
+| `extensibility-sdk` | `src/vite-plugin.ts` | Proxy `root.tsx` via `load` hook |
+| `extensibility-sdk` | `src/context.ts` | `createContextMiddleware()`, re-export `createContext` |
+| `extension-a` | `src/middleware/auth.ts` | Global middleware (logs requests) |
+| `extension-a` | `src/middleware/context.ts` | Context middleware (injects typed value) |
+| `react-router-template` | `app/routes/home.tsx` | Loader reads context, renders value |
 
 ---
 
 ## Phase 3: Route-Specific Enhancement
 
-**Goal:** Extension adds middleware/loaders to a specific route without modifying that route's file.
-
-### What we build
+**Goal:** Extension adds middleware/loaders to a specific route via load hook proxy.
 
 | Package | File | Action |
 |---|---|---|
 | `extensibility-sdk` | `src/codegen.ts` | Add `generateRouteProxy()` |
-| `extensibility-sdk` | `src/vite-plugin.ts` | Update — proxy enhanced route modules via `load` hook |
-| `extensibility-sdk` | `src/runtime.ts` | Create — `mergeLoaders()` |
-| `extension-a` | `src/middleware/analytics.ts` | Create — route-specific middleware |
-| `extension-a` | `src/index.ts` | Update — add `routeEnhancements` field |
-
-### Verify
-
-```bash
-# Analytics middleware runs on / (home) only
-# Analytics middleware does NOT run on /about
-```
+| `extensibility-sdk` | `src/vite-plugin.ts` | Proxy enhanced route modules via `load` hook |
+| `extensibility-sdk` | `src/runtime.ts` | `mergeLoaders()` |
+| `extension-a` | `src/middleware/analytics.ts` | Route-specific middleware |
 
 ---
 
 ## Phase 4: Component Provision
 
-**Goal:** Extension provides React components importable via a virtual module.
-
-### What we build
+**Goal:** Extension provides React components via virtual module.
 
 | Package | File | Action |
 |---|---|---|
-| `extensibility-sdk` | `src/vite-plugin.ts` | Update — add `virtual:extensibility-sdk/components` |
-| `extension-a` | `src/components/LoyaltyBanner.tsx` | Create — sample component |
-| `react-router-template` | `app/routes/home.tsx` | Update — import and render component |
-
-### Verify
-
-```bash
-# Home page renders LoyaltyBanner from extension-a
-```
+| `extensibility-sdk` | `src/vite-plugin.ts` | `virtual:extensibility-sdk/components` |
+| `extension-a` | `src/components/LoyaltyBanner.tsx` | Sample component |
 
 ---
 
 ## Phase 5: Client Entry Customization
 
-**Goal:** Extension wraps the app with providers at the client entry level.
-
-### What we build
+**Goal:** Extension wraps app with providers at client entry.
 
 | Package | File | Action |
 |---|---|---|
-| `extensibility-sdk` | `src/vite-plugin.ts` | Update — add `virtual:extensibility-sdk/client-entry` |
-| `extension-a` | `src/client/wrap-app.tsx` | Create — wraps app in provider |
-| `react-router-template` | `app/entry.client.tsx` | Create — uses virtual module |
-
-### Verify
-
-```bash
-# Extension's provider wraps the entire app
-```
+| `extensibility-sdk` | `src/vite-plugin.ts` | `virtual:extensibility-sdk/client-entry` |
+| `extension-a` | `src/client/wrap-app.tsx` | Wraps app in provider |
+| `react-router-template` | `app/entry.client.tsx` | Uses virtual module |
 
 ---
 
 ## Key Design Decisions
 
-1. **Unified `load` hook** — one mechanism for routes.ts, root.tsx, and route modules. No generated files on disk, no `withExtensions()`, no template route changes.
-2. **`?ext-original` query param** — standard Vite pattern for recursion breaking. No Set-based tracking, no importer checks.
-3. **Two template files only** — `vite.config.ts` (plugin) and `react-router.config.ts` (future flag). Everything else is handled by the plugin.
-4. **Absolute paths in proxy code** — extensions in node_modules are referenced by absolute path. Vite resolves these via `/@fs/`. No aliases needed.
-5. **`defineExtension(dir, definition)`** — directory is explicit, no magic `__dirname` detection. All relative paths resolve against it.
+1. **Two mechanisms, one reason** — `withExtensions()` for routes (forced by RR7's `plugins: []`), `load` hook for everything else. Not by choice but by constraint.
+2. **`?ext-original` query param** — standard Vite pattern for load hook recursion breaking.
+3. **Three template files** — `vite.config.ts`, `react-router.config.ts`, `routes.ts`. After setup, extensions are added/removed in `vite.config.ts` and `routes.ts`.
+4. **Absolute paths** — extension files referenced by absolute path in proxy code. Vite resolves via `/@fs/`.
+5. **`defineExtension(dir, def)`** — explicit directory for resolving relative paths.

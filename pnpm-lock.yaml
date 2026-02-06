@@ -10,12 +10,37 @@ importers:
 
   packages/extensibility-sdk:
     devDependencies:
+      '@react-router/dev':
+        specifier: 7.12.0
+        version: 7.12.0(@react-router/serve@7.12.0(react-router@7.12.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3))(@types/node@22.19.9)(jiti@2.6.1)(lightningcss@1.30.2)(react-router@7.12.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(typescript@5.9.3)(vite@7.3.1(@types/node@22.19.9)(jiti@2.6.1)(lightningcss@1.30.2))
+      react-router:
+        specifier: 7.12.0
+        version: 7.12.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
+      vite:
+        specifier: ^7.1.7
+        version: 7.3.1(@types/node@22.19.9)(jiti@2.6.1)(lightningcss@1.30.2)
 
   packages/extension-a:
+    dependencies:
+      extensibility-sdk:
+        specifier: workspace:*
+        version: link:../extensibility-sdk
     devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.19.9
+      '@types/react':
+        specifier: ^19.2.7
+        version: 19.2.13
+      react:
+        specifier: ^19.2.4
+        version: 19.2.4
+      react-router:
+        specifier: 7.12.0
+        version: 7.12.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       typescript:
         specifier: ^5.9.2
         version: 5.9.3
@@ -31,6 +56,9 @@ importers:
       extensibility-sdk:
         specifier: workspace:*
         version: link:../extensibility-sdk
+      extension-a:
+        specifier: workspace:*
+        version: link:../extension-a
       isbot:
         specifier: ^5.1.31
         version: 5.1.34

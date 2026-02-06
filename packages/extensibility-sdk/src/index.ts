@@ -1,3 +1,2 @@
-export function greet(name: string): string {
-  return `Hello from extensibility-sdk, ${name}!`;
-}
+export { defineExtension } from "./types.js";
+export type { ExtensionDefinition, RouteHelpers } from "./types.js";
