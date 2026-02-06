@@ -6,15 +6,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(__dirname, "..");
 
 export default defineExtension(packageRoot, {
-  name: "extension-a",
+  name: "extension-about-page",
 
   routes: ({ route }) => [route("about", "./src/routes/about.tsx")],
-
-  middleware: ["./src/middleware/logging.ts"],
-
-  routeEnhancements: {
-    "routes/home": {
-      middleware: ["./src/middleware/analytics.ts"],
-    },
-  },
 });

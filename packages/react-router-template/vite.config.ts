@@ -3,13 +3,13 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { extensibilityPlugin } from "extensibility-sdk/vite";
-import extensionA from "extension-a";
+import extensionAboutPage from "extension-about-page";
 import extensionDevtools from "extension-devtools";
 
 export default defineConfig({
   plugins: [
     tailwindcss(),
-    extensibilityPlugin({ extensions: [extensionA, extensionDevtools] }),
+    extensibilityPlugin({ extensions: [extensionAboutPage, extensionDevtools] }),
     reactRouter(),
     tsconfigPaths(),
   ],

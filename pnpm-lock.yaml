@@ -23,7 +23,7 @@ importers:
         specifier: ^7.1.7
         version: 7.3.1(@types/node@22.19.9)(jiti@2.6.1)(lightningcss@1.30.2)
 
-  packages/extension-a:
+  packages/extension-about-page:
     dependencies:
       extensibility-sdk:
         specifier: workspace:*
@@ -78,9 +78,9 @@ importers:
       extensibility-sdk:
         specifier: workspace:*
         version: link:../extensibility-sdk
-      extension-a:
+      extension-about-page:
         specifier: workspace:*
-        version: link:../extension-a
+        version: link:../extension-about-page
       extension-devtools:
         specifier: workspace:*
         version: link:../extension-devtools
