@@ -61,6 +61,20 @@ export interface ExtensionDefinition {
   context?: boolean;
 
   /**
+   * Server-side actions provided by this extension.
+   * Each key is the action name, the value specifies a handler module path
+   * (relative to extension directory) whose default export is the action function.
+   * Actions are injected into the RR7 context and callable via `getExtensionActions()`.
+   */
+  actions?: Record<
+    string,
+    {
+      description?: string;
+      handler: string;
+    }
+  >;
+
+  /**
    * React components provided by this extension.
    * Map of component name to module path (relative to extension directory).
    */

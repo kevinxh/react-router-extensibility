@@ -37,6 +37,7 @@ const mwTag = tag("#fef3c7", "#92400e", "#fcd34d");
 const greenTag = tag("#e6f4ea", "#1a7f37", "#a3d9b1");
 const dimTag = tag("#f5f5f5", "#999", "#e0e0e0");
 const ctxTag = tag("#fce7f3", "#9d174d", "#f9a8d4");
+const actionTag = tag("#ede9fe", "#6d28d9", "#c4b5fd");
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -118,19 +119,10 @@ function ContextSection({
   const snapshot = contextValues.find((cv) => cv.extension === ext.name);
 
   return (
-    <div style={{ marginTop: 4 }}>
-      <Row label="Context">
-        {ext.context ? (
-          <span style={ctxTag}>provider</span>
-        ) : (
-          <Dim>None</Dim>
-        )}
-      </Row>
-      {snapshot && (
+    <Row label="Context">
+      {snapshot ? (
         <div
           style={{
-            marginTop: 4,
-            marginLeft: 78,
             background: "#fdf2f8",
             border: "1px solid #f9a8d4",
             borderRadius: 4,
@@ -148,8 +140,10 @@ function ContextSection({
             ? snapshot.value
             : JSON.stringify(snapshot.value, null, 2)}
         </div>
+      ) : (
+        <Dim>None</Dim>
       )}
-    </div>
+    </Row>
   );
 }
 
@@ -206,6 +200,16 @@ function ExtensionCard({
       <MiddlewareSection ext={ext} />
 
       <ContextSection ext={ext} contextValues={contextValues} />
+
+      <Row label="Actions">
+        {ext.actions.length > 0 ? (
+          ext.actions.map((a) => (
+            <span key={a.name} style={actionTag} title={a.description}>{a.name}</span>
+          ))
+        ) : (
+          <Dim>None</Dim>
+        )}
+      </Row>
 
       <Row label="Components">
         {ext.components.length > 0 ? (

@@ -126,6 +126,11 @@ function buildExtensionsMeta(extensions: ExtensionDefinition[]): ExtensionMeta[]
     // Extract component names
     const components = Object.keys(ext.components ?? {});
 
+    // Extract action metadata
+    const actions = Object.entries(ext.actions ?? {}).map(
+      ([name, def]) => ({ name, description: def.description })
+    );
+
     return {
       name: ext.name,
       version: ext.version,
@@ -134,6 +139,7 @@ function buildExtensionsMeta(extensions: ExtensionDefinition[]): ExtensionMeta[]
       routes,
       global: { middleware: globalMiddleware },
       routeEnhancements,
+      actions,
       components,
       clientEntry: !!ext.clientEntry,
       context: !!ext.context,
@@ -228,7 +234,7 @@ export function generateRootProxy(
 
   // Import SDK context keys
   lines.push(
-    `import { extensionsContext, extensionContextStore, extensionContextValues } from "extensibility-sdk/context";`
+    `import { extensionsContext, extensionContextStore, extensionContextValues, extensionActionsStore } from "extensibility-sdk/context";`
   );
   lines.push(``);
 
@@ -247,13 +253,52 @@ export function generateRootProxy(
 
   lines.push(``);
 
-  // Generate inline metadata middleware — sets extension metadata + initializes context store
+  // Import extension action handler modules
+  // Track: { extName: string, actionName: string, varName: string }[]
+  const actionImports: { extName: string; actionName: string; varName: string }[] = [];
+  let actionIndex = 0;
+  for (const ext of extensions) {
+    for (const [actionName, actionDef] of Object.entries(ext.actions ?? {})) {
+      const absPath = resolve(ext._resolvedDir, actionDef.handler);
+      const varName = `_action${actionIndex}`;
+      lines.push(`import ${varName} from "${absPath}";`);
+      actionImports.push({ extName: ext.name, actionName, varName });
+      actionIndex++;
+    }
+  }
+
+  if (actionImports.length > 0) {
+    lines.push(``);
+  }
+
+  // Generate inline metadata middleware — sets extension metadata + initializes stores
   const meta = buildExtensionsMeta(extensions);
+
+  // Build the actions store initialization code
+  const actionsStoreLines: string[] = [];
+  actionsStoreLines.push(`  const _actionsStore = new Map();`);
+  // Group action imports by extension name
+  const actionsByExt = new Map<string, { actionName: string; varName: string }[]>();
+  for (const ai of actionImports) {
+    if (!actionsByExt.has(ai.extName)) actionsByExt.set(ai.extName, []);
+    actionsByExt.get(ai.extName)!.push(ai);
+  }
+  for (const [extName, actions] of actionsByExt) {
+    const entries = actions
+      .map((a) => `${JSON.stringify(a.actionName)}: ${a.varName}`)
+      .join(", ");
+    actionsStoreLines.push(
+      `  _actionsStore.set(${JSON.stringify(extName)}, { ${entries} });`
+    );
+  }
+  actionsStoreLines.push(`  args.context.set(extensionActionsStore, _actionsStore);`);
+
   lines.push(
-    `// SDK middleware — injects extension metadata and initializes context store`,
+    `// SDK middleware — injects extension metadata and initializes stores`,
     `function _extensionsMetadataMiddleware(args, next) {`,
     `  args.context.set(extensionsContext, ${JSON.stringify(meta)});`,
     `  args.context.set(extensionContextStore, new Map());`,
+    ...actionsStoreLines,
     `  return next();`,
     `}`,
     ``

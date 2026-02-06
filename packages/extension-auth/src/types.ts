@@ -9,3 +9,13 @@ export interface AuthContextValue {
     role: string;
   } | null;
 }
+
+/**
+ * Server-side actions provided by extension-auth.
+ * Use with `getExtensionActions<AuthActions>(context, "extension-auth")`.
+ */
+export interface AuthActions {
+  login: (username: string, password: string) => Promise<{ success: boolean; user: AuthContextValue["currentUser"] }>;
+  logout: () => Promise<{ success: boolean }>;
+  getSession: () => Promise<AuthContextValue>;
+}

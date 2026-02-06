@@ -17,6 +17,7 @@ export interface ExtensionMeta {
     route: string;
     middleware: string[];
   }[];
+  actions: { name: string; description?: string }[];
   components: string[];
   clientEntry: boolean;
   context: boolean;
@@ -50,6 +51,33 @@ export interface ExtensionContextSnapshot {
 export const extensionContextValues = createContext<
   ExtensionContextSnapshot[]
 >([]);
+
+/**
+ * Internal RR7 context key — holds a Map<extensionName, Record<actionName, handler>>
+ * of action functions registered by extensions. Populated by SDK codegen.
+ */
+export const extensionActionsStore = createContext<
+  Map<string, Record<string, Function>>
+>(new Map());
+
+/**
+ * Retrieve the action functions registered by an extension.
+ * Called by the app or other extensions in loaders/actions/middleware.
+ *
+ * @param context - The RR7 context object
+ * @param extensionName - The extension's unique name
+ * @returns A record of action functions, or `undefined` if the extension has no actions
+ */
+export function getExtensionActions<T = Record<string, Function>>(
+  context: { get: Function },
+  extensionName: string
+): T | undefined {
+  const store = context.get(extensionActionsStore) as Map<
+    string,
+    Record<string, Function>
+  >;
+  return store.get(extensionName) as T | undefined;
+}
 
 /**
  * Set a context value for an extension.
