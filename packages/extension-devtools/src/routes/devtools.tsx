@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   extensionsContext,
   extensionContextValues,
@@ -86,6 +86,138 @@ const tagStyle = (key: CapKey): React.CSSProperties => {
     marginBottom: 3,
   };
 };
+
+// ── Architecture Diagram Types & Constants ────────────────────────────
+
+type HoverTarget =
+  | { type: "none" }
+  | { type: "extension"; name: string }
+  | { type: "stage"; index: number };
+
+interface PipelineStage {
+  id: string;
+  label: string;
+  sublabel: string;
+  colorKey: CapKey;
+}
+
+interface ExtConnection {
+  stageIndex: number;
+  colorKey: CapKey;
+}
+
+interface ExtPositioned {
+  ext: ExtensionMeta;
+  connections: ExtConnection[];
+  finalY: number;
+  centerY: number;
+}
+
+const PIPELINE_STAGES: PipelineStage[] = [
+  { id: "entry-server", label: "entry.server", sublabel: "Server Instrumentations", colorKey: "instruments" },
+  { id: "root-tsx", label: "root.tsx", sublabel: "Middleware · Context · Actions", colorKey: "middleware" },
+  { id: "routes-ts", label: "routes.ts", sublabel: "Route Injection", colorKey: "routes" },
+  { id: "route-modules", label: "Route Modules", sublabel: "Per-route Enhancement", colorKey: "middleware" },
+  { id: "entry-client", label: "entry.client", sublabel: "Client Hydration Hooks", colorKey: "hooks" },
+];
+
+const DG = {
+  viewBoxWidth: 800,
+  viewBoxHeight: 460,
+
+  pipeline: {
+    x: 40,
+    boxWidth: 190,
+    boxHeight: 56,
+    boxRadius: 10,
+    startY: 24,
+    spacingY: 80,
+  },
+
+  extensions: {
+    x: 580,
+    boxWidth: 185,
+    boxHeight: 44,
+    boxRadius: 8,
+    minGap: 10,
+  },
+
+  connection: {
+    strokeWidth: 1.8,
+    strokeWidthHover: 2.8,
+    dimOpacity: 0.1,
+    normalOpacity: 0.55,
+    hoverOpacity: 1,
+    cpOffsetRatio: 0.38,
+  },
+
+  legend: { y: 430 },
+} as const;
+
+// ── Diagram helpers ──────────────────────────────────────────────────
+
+function getExtConnections(ext: ExtensionMeta): ExtConnection[] {
+  const conns: ExtConnection[] = [];
+  if (ext.instrumentations?.server) conns.push({ stageIndex: 0, colorKey: "instruments" });
+  if (ext.global.middleware.length > 0) conns.push({ stageIndex: 1, colorKey: "middleware" });
+  if (ext.context) conns.push({ stageIndex: 1, colorKey: "context" });
+  if (ext.actions.length > 0) conns.push({ stageIndex: 1, colorKey: "actions" });
+  if (ext.routes.length > 0) conns.push({ stageIndex: 2, colorKey: "routes" });
+  if (ext.routeEnhancements.length > 0) conns.push({ stageIndex: 3, colorKey: "middleware" });
+  if (ext.clientHooks?.beforeHydration || ext.clientHooks?.afterHydration)
+    conns.push({ stageIndex: 4, colorKey: "hooks" });
+  return conns;
+}
+
+function stageCenterY(idx: number): number {
+  return DG.pipeline.startY + idx * DG.pipeline.spacingY + DG.pipeline.boxHeight / 2;
+}
+
+function layoutExtensions(extensions: ExtensionMeta[]): ExtPositioned[] {
+  const items = extensions
+    .map((ext) => {
+      const connections = getExtConnections(ext);
+      if (connections.length === 0) return null;
+      const avgY =
+        connections.reduce((s, c) => s + stageCenterY(c.stageIndex), 0) / connections.length;
+      return {
+        ext,
+        connections,
+        idealY: avgY - DG.extensions.boxHeight / 2,
+        finalY: 0,
+        centerY: 0,
+      };
+    })
+    .filter(Boolean) as (ExtPositioned & { idealY: number })[];
+
+  items.sort((a, b) => a.idealY - b.idealY);
+
+  for (let i = 0; i < items.length; i++) {
+    if (i === 0) {
+      items[i].finalY = Math.max(DG.pipeline.startY, items[i].idealY);
+    } else {
+      const prevBottom = items[i - 1].finalY + DG.extensions.boxHeight;
+      items[i].finalY = Math.max(prevBottom + DG.extensions.minGap, items[i].idealY);
+    }
+    items[i].centerY = items[i].finalY + DG.extensions.boxHeight / 2;
+  }
+
+  return items;
+}
+
+function bezierPath(
+  stageIdx: number,
+  extCenterY: number,
+  srcYOffset: number,
+): string {
+  const srcX = DG.pipeline.x + DG.pipeline.boxWidth;
+  const srcY = stageCenterY(stageIdx) + srcYOffset;
+  const tgtX = DG.extensions.x;
+  const tgtY = extCenterY;
+  const gap = tgtX - srcX;
+  const cpOff = gap * DG.connection.cpOffsetRatio;
+  return `M${srcX},${srcY} C${srcX + cpOff},${srcY} ${tgtX - cpOff},${tgtY} ${tgtX},${tgtY}`;
+}
 
 // ── Icons (simple inline SVGs) ───────────────────────────────────────
 const svgBase: React.CSSProperties = {
@@ -209,6 +341,296 @@ function countCapabilities(ext: ExtensionMeta) {
 function hasCapability(ext: ExtensionMeta, key: CapKey): boolean {
   const c = countCapabilities(ext);
   return c[key] > 0;
+}
+
+// ── Architecture Diagram Component ───────────────────────────────────
+
+function ArchitectureDiagram({ extensions }: { extensions: ExtensionMeta[] }) {
+  const [hover, setHover] = useState<HoverTarget>({ type: "none" });
+  const positioned = useMemo(() => layoutExtensions(extensions), [extensions]);
+
+  // Pre-compute how many connections land on each stage (for vertical spread)
+  const stageConnCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const p of positioned) {
+      for (const c of p.connections) {
+        counts.set(c.stageIndex, (counts.get(c.stageIndex) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [positioned]);
+
+  // Dynamic viewBox height
+  const vbHeight = useMemo(() => {
+    if (positioned.length === 0) return DG.viewBoxHeight;
+    const lastBottom = positioned[positioned.length - 1].finalY + DG.extensions.boxHeight;
+    return Math.max(DG.viewBoxHeight, lastBottom + 60);
+  }, [positioned]);
+
+  // Build all connection paths with offset tracking
+  const allConnections = useMemo(() => {
+    const stageOffsetCounters = new Map<number, number>();
+    const result: {
+      extName: string;
+      stageIndex: number;
+      colorKey: CapKey;
+      path: string;
+      extCenterY: number;
+    }[] = [];
+
+    for (const p of positioned) {
+      for (const conn of p.connections) {
+        const total = stageConnCounts.get(conn.stageIndex) || 1;
+        const idx = stageOffsetCounters.get(conn.stageIndex) || 0;
+        stageOffsetCounters.set(conn.stageIndex, idx + 1);
+
+        const maxSpread = Math.min(20, DG.pipeline.boxHeight / 2 - 4);
+        let srcYOffset = 0;
+        if (total > 1) {
+          srcYOffset = -maxSpread / 2 + (maxSpread / (total - 1)) * idx;
+        }
+
+        result.push({
+          extName: p.ext.name,
+          stageIndex: conn.stageIndex,
+          colorKey: conn.colorKey,
+          path: bezierPath(conn.stageIndex, p.centerY, srcYOffset),
+          extCenterY: p.centerY,
+        });
+      }
+    }
+    return result;
+  }, [positioned, stageConnCounts]);
+
+  // Opacity helpers
+  function connOpacity(extName: string, stageIdx: number): number {
+    if (hover.type === "none") return DG.connection.normalOpacity;
+    if (hover.type === "extension" && hover.name === extName) return DG.connection.hoverOpacity;
+    if (hover.type === "stage" && hover.index === stageIdx) return DG.connection.hoverOpacity;
+    return DG.connection.dimOpacity;
+  }
+
+  function stageOpacity(idx: number): number {
+    if (hover.type === "none") return 1;
+    if (hover.type === "stage" && hover.index === idx) return 1;
+    if (hover.type === "extension") {
+      const p = positioned.find((p) => p.ext.name === hover.name);
+      if (p && p.connections.some((c) => c.stageIndex === idx)) return 1;
+    }
+    return 0.35;
+  }
+
+  function extOpacity(name: string): number {
+    if (hover.type === "none") return 1;
+    if (hover.type === "extension" && hover.name === name) return 1;
+    if (hover.type === "stage") {
+      const p = positioned.find((p) => p.ext.name === name);
+      if (p && p.connections.some((c) => c.stageIndex === hover.index)) return 1;
+    }
+    return 0.25;
+  }
+
+  const legendY = vbHeight - 26;
+
+  return (
+    <svg
+      viewBox={`0 0 ${DG.viewBoxWidth} ${vbHeight}`}
+      width="100%"
+      style={{ display: "block" }}
+      role="img"
+      aria-label="Architecture diagram showing how extensions connect to the React Router pipeline"
+      onMouseLeave={() => setHover({ type: "none" })}
+    >
+      {/* Defs: shadow filter + animation */}
+      <defs>
+        <filter id="diag-shadow" x="-4%" y="-4%" width="108%" height="112%">
+          <feDropShadow dx="0" dy="1" stdDeviation="2" floodOpacity="0.07" />
+        </filter>
+        <style>{`
+          @keyframes dash-march { to { stroke-dashoffset: -20; } }
+          .conn-active { stroke-dasharray: 8 4; animation: dash-march 0.6s linear infinite; }
+        `}</style>
+      </defs>
+
+      {/* Layer 1: Connection bezier curves (behind boxes) */}
+      {allConnections.map((conn, i) => {
+        const opacity = connOpacity(conn.extName, conn.stageIndex);
+        const isActive = opacity === DG.connection.hoverOpacity;
+        return (
+          <path
+            key={i}
+            d={conn.path}
+            fill="none"
+            stroke={capColor(conn.colorKey).dot}
+            strokeWidth={isActive ? DG.connection.strokeWidthHover : DG.connection.strokeWidth}
+            opacity={opacity}
+            className={isActive ? "conn-active" : undefined}
+            style={{ transition: "opacity 0.2s, stroke-width 0.2s" }}
+          />
+        );
+      })}
+
+      {/* Layer 2: Down-arrows between pipeline stages */}
+      {[0, 1, 2, 3].map((i) => {
+        const fromBottom = DG.pipeline.startY + i * DG.pipeline.spacingY + DG.pipeline.boxHeight;
+        const toTop = DG.pipeline.startY + (i + 1) * DG.pipeline.spacingY;
+        const cx = DG.pipeline.x + DG.pipeline.boxWidth / 2;
+        const y1 = fromBottom + 3;
+        const y2 = toTop - 3;
+        return (
+          <g key={`arrow-${i}`} opacity={0.25}>
+            <line x1={cx} y1={y1} x2={cx} y2={y2} stroke={C.muted} strokeWidth={1.5} />
+            <polygon points={`${cx - 4},${y2 - 6} ${cx},${y2} ${cx + 4},${y2 - 6}`} fill={C.muted} />
+          </g>
+        );
+      })}
+
+      {/* Layer 3: Pipeline stage boxes */}
+      {PIPELINE_STAGES.map((stage, i) => {
+        const topY = DG.pipeline.startY + i * DG.pipeline.spacingY;
+        const col = capColor(stage.colorKey);
+        return (
+          <g
+            key={stage.id}
+            onMouseEnter={() => setHover({ type: "stage", index: i })}
+            onMouseLeave={() => setHover({ type: "none" })}
+            style={{ cursor: "pointer" }}
+            opacity={stageOpacity(i)}
+          >
+            <rect
+              x={DG.pipeline.x}
+              y={topY}
+              width={DG.pipeline.boxWidth}
+              height={DG.pipeline.boxHeight}
+              rx={DG.pipeline.boxRadius}
+              fill={C.cardBg}
+              stroke={col.border}
+              strokeWidth={1.5}
+              filter="url(#diag-shadow)"
+            />
+            {/* Left accent bar */}
+            <rect
+              x={DG.pipeline.x}
+              y={topY + 8}
+              width={4}
+              height={DG.pipeline.boxHeight - 16}
+              rx={2}
+              fill={col.dot}
+            />
+            <text
+              x={DG.pipeline.x + 16}
+              y={topY + 23}
+              fontSize={12.5}
+              fontWeight={600}
+              fontFamily="ui-monospace, 'SF Mono', 'Cascadia Code', monospace"
+              fill={C.text}
+            >
+              {stage.label}
+            </text>
+            <text
+              x={DG.pipeline.x + 16}
+              y={topY + 40}
+              fontSize={10}
+              fill={C.secondary}
+              fontFamily="system-ui, -apple-system, sans-serif"
+            >
+              {stage.sublabel}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Layer 4: Extension boxes */}
+      {positioned.map((p) => {
+        const displayName = p.ext.name.replace(/^extension-/, "");
+        // Deduplicate connection colors for capability dots
+        const uniqueColors = [...new Set(p.connections.map((c) => c.colorKey))];
+        return (
+          <g
+            key={p.ext.name}
+            onMouseEnter={() => setHover({ type: "extension", name: p.ext.name })}
+            onMouseLeave={() => setHover({ type: "none" })}
+            style={{ cursor: "pointer" }}
+            opacity={extOpacity(p.ext.name)}
+          >
+            <rect
+              x={DG.extensions.x}
+              y={p.finalY}
+              width={DG.extensions.boxWidth}
+              height={DG.extensions.boxHeight}
+              rx={DG.extensions.boxRadius}
+              fill={C.cardBg}
+              stroke={C.cardBorder}
+              strokeWidth={1}
+              filter="url(#diag-shadow)"
+            />
+            {/* Capability dots top-right */}
+            {uniqueColors.map((key, ci) => (
+              <circle
+                key={key}
+                cx={DG.extensions.x + DG.extensions.boxWidth - 14 - ci * 14}
+                cy={p.finalY + 13}
+                r={4}
+                fill={capColor(key).dot}
+              />
+            ))}
+            <text
+              x={DG.extensions.x + 12}
+              y={p.finalY + 28}
+              fontSize={11.5}
+              fontWeight={600}
+              fill={C.text}
+              fontFamily="system-ui, -apple-system, sans-serif"
+            >
+              {displayName}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* No extensions fallback */}
+      {positioned.length === 0 && (
+        <text
+          x={DG.extensions.x + DG.extensions.boxWidth / 2}
+          y={stageCenterY(2)}
+          textAnchor="middle"
+          fontSize={12}
+          fill={C.muted}
+          fontFamily="system-ui, -apple-system, sans-serif"
+          fontStyle="italic"
+        >
+          No extensions installed
+        </text>
+      )}
+
+      {/* Layer 5: Legend */}
+      <g transform={`translate(${DG.pipeline.x}, ${legendY})`}>
+        {(
+          [
+            ["routes", "Routes"],
+            ["middleware", "Middleware"],
+            ["context", "Context"],
+            ["actions", "Actions"],
+            ["hooks", "Hooks"],
+            ["instruments", "Instruments"],
+          ] as [CapKey, string][]
+        ).map(([key, label], i) => (
+          <g key={key} transform={`translate(${i * 120}, 0)`}>
+            <circle cx={6} cy={6} r={4.5} fill={capColor(key).dot} />
+            <text
+              x={16}
+              y={10}
+              fontSize={10}
+              fill={C.secondary}
+              fontFamily="system-ui, -apple-system, sans-serif"
+            >
+              {label}
+            </text>
+          </g>
+        ))}
+      </g>
+    </svg>
+  );
 }
 
 // ── Summary stat card ────────────────────────────────────────────────
@@ -835,6 +1257,32 @@ export default function Devtools({
           label="Instruments"
           color={C.instruments.dot}
         />
+      </div>
+
+      {/* Architecture Diagram */}
+      <div
+        style={{
+          marginBottom: 20,
+          background: C.cardBg,
+          border: `1px solid ${C.cardBorder}`,
+          borderRadius: 12,
+          boxShadow: C.shadow,
+          padding: "16px 12px 12px",
+        }}
+      >
+        <h2
+          style={{
+            fontSize: "0.72rem",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+            color: C.muted,
+            margin: "0 0 8px 4px",
+          }}
+        >
+          Architecture
+        </h2>
+        <ArchitectureDiagram extensions={extensions} />
       </div>
 
       {/* Extension cards */}
