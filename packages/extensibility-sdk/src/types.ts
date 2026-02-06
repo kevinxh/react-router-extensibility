@@ -16,6 +16,9 @@ export interface ExtensionDefinition {
   /** Unique name for the extension */
   name: string;
 
+  /** Semver version string */
+  version?: string;
+
   /** Short description of what this extension does */
   description?: string;
 

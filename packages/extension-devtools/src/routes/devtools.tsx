@@ -12,202 +12,150 @@ export async function loader({ context }: { context: Map<unknown, unknown> }) {
   return { extensions };
 }
 
-const styles = {
-  page: {
-    padding: "2rem",
-    fontFamily: "system-ui, sans-serif",
-    maxWidth: 720,
-    margin: "0 auto",
-  },
-  card: {
-    border: "1px solid #e0e0e0",
-    borderRadius: 12,
-    padding: "1.5rem",
-    marginBottom: "1.5rem",
-    background: "#fff",
-  },
-  extName: {
-    margin: "0 0 1.25rem",
-    fontSize: "1.4rem",
-    fontWeight: 600 as const,
-  },
-  section: {
-    marginBottom: "1rem",
-  },
-  sectionTitle: {
-    fontSize: "0.75rem",
-    fontWeight: 600 as const,
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.05em",
-    color: "#888",
-    margin: "0 0 0.4rem",
-  },
-  tag: (active: boolean) => ({
-    display: "inline-block",
-    padding: "0.2rem 0.6rem",
-    borderRadius: 4,
-    fontSize: "0.8rem",
-    fontFamily: "monospace",
-    background: active ? "#e6f4ea" : "#f5f5f5",
-    color: active ? "#1a7f37" : "#999",
-    border: `1px solid ${active ? "#a3d9b1" : "#e0e0e0"}`,
-    marginRight: "0.4rem",
-    marginBottom: "0.3rem",
-  }),
-  routeTag: {
-    display: "inline-block",
-    padding: "0.2rem 0.6rem",
-    borderRadius: 4,
-    fontSize: "0.8rem",
-    fontFamily: "monospace",
-    background: "#eef2ff",
-    color: "#4338ca",
-    border: "1px solid #c7d2fe",
-    marginRight: "0.4rem",
-    marginBottom: "0.3rem",
-  },
-  mwTag: {
-    display: "inline-block",
-    padding: "0.2rem 0.6rem",
-    borderRadius: 4,
-    fontSize: "0.8rem",
-    fontFamily: "monospace",
-    background: "#fef3c7",
-    color: "#92400e",
-    border: "1px solid #fcd34d",
-    marginRight: "0.4rem",
-    marginBottom: "0.3rem",
-  },
-  enhancementRow: {
-    display: "flex",
-    alignItems: "center" as const,
-    gap: "0.5rem",
-    marginBottom: "0.3rem",
-    fontSize: "0.8rem",
-  },
-  enhancementRoute: {
-    fontFamily: "monospace",
-    color: "#4338ca",
-    fontWeight: 500 as const,
-  },
-  empty: {
-    fontSize: "0.8rem",
-    color: "#bbb",
-    fontStyle: "italic" as const,
-  },
-} as const;
+const tag = (bg: string, fg: string, border: string): React.CSSProperties => ({
+  display: "inline-block",
+  padding: "1px 6px",
+  borderRadius: 3,
+  fontSize: "0.75rem",
+  fontFamily: "monospace",
+  lineHeight: "1.5",
+  background: bg,
+  color: fg,
+  border: `1px solid ${border}`,
+  marginRight: 4,
+  marginBottom: 2,
+});
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+const routeTag = tag("#eef2ff", "#4338ca", "#c7d2fe");
+const mwTag = tag("#fef3c7", "#92400e", "#fcd34d");
+const greenTag = tag("#e6f4ea", "#1a7f37", "#a3d9b1");
+const dimTag = tag("#f5f5f5", "#999", "#e0e0e0");
+
+function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div style={styles.section}>
-      <div style={styles.sectionTitle}>{title}</div>
+    <span
+      style={{
+        fontSize: "0.65rem",
+        fontWeight: 600,
+        textTransform: "uppercase",
+        letterSpacing: "0.04em",
+        color: "#999",
+        minWidth: 70,
+        flexShrink: 0,
+      }}
+    >
       {children}
+    </span>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
+      <Label>{label}</Label>
+      <div style={{ flex: 1 }}>{children}</div>
     </div>
   );
 }
 
-function Empty() {
-  return <span style={styles.empty}>none</span>;
+function Dim({ children }: { children: React.ReactNode }) {
+  return <span style={{ fontSize: "0.75rem", color: "#ccc", fontStyle: "italic" }}>{children}</span>;
+}
+
+function MiddlewareSection({ ext }: { ext: ExtensionMeta }) {
+  const hasGlobal = ext.global.middleware.length > 0;
+  const hasRouteSpecific = ext.routeEnhancements.length > 0;
+
+  if (!hasGlobal && !hasRouteSpecific) return null;
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <Label>Middleware</Label>
+      <div style={{ paddingLeft: 2, marginTop: 2 }}>
+        {hasGlobal && (
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+            <span style={{ fontSize: "0.7rem", color: "#aaa", minWidth: 50 }}>global</span>
+            <div>
+              {ext.global.middleware.map((name) => (
+                <span key={name} style={mwTag}>{name}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        {ext.routeEnhancements.map((enh) => (
+          <div key={enh.route} style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+            <span style={{ fontSize: "0.7rem", fontFamily: "monospace", color: "#4338ca", minWidth: 50 }}>
+              {enh.route}
+            </span>
+            <div>
+              {enh.middleware.map((name) => (
+                <span key={name} style={mwTag}>{name}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ExtensionCard({ ext }: { ext: ExtensionMeta }) {
   return (
-    <div style={styles.card}>
-      <h2 style={styles.extName}>{ext.name}</h2>
+    <div
+      style={{
+        border: "1px solid #e5e5e5",
+        borderRadius: 8,
+        padding: "10px 14px",
+        marginBottom: 8,
+        background: "#fff",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
+        <span style={{ fontSize: "1rem", fontWeight: 600 }}>{ext.name}</span>
+        {ext.version && (
+          <span style={{ fontSize: "0.75rem", color: "#999", fontFamily: "monospace" }}>{ext.version}</span>
+        )}
+      </div>
 
       {ext.description && (
-        <p style={{ color: "#555", fontSize: "0.9rem", margin: "0 0 1rem" }}>
-          {ext.description}
-        </p>
+        <p style={{ color: "#777", fontSize: "0.8rem", margin: "0 0 4px" }}>{ext.description}</p>
       )}
 
       {ext.author && (
-        <Section title="Author">
+        <div style={{ marginBottom: 4 }}>
           {ext.author.url ? (
-            <a href={ext.author.url} style={{ color: "#4338ca", fontSize: "0.85rem" }}>
+            <a href={ext.author.url} style={{ fontSize: "0.75rem", color: "#888", textDecoration: "none" }}>
               {ext.author.name}
             </a>
           ) : (
-            <span style={{ fontSize: "0.85rem" }}>{ext.author.name}</span>
+            <span style={{ fontSize: "0.75rem", color: "#888" }}>{ext.author.name}</span>
           )}
-        </Section>
+        </div>
       )}
 
-      <Section title="Routes">
-        {ext.routes.length > 0 ? (
-          <div>
-            {ext.routes.map((r) => (
-              <span key={r.path} style={styles.routeTag}>
-                {r.path}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <Empty />
-        )}
-      </Section>
+      {ext.routes.length > 0 && (
+        <Row label="Routes">
+          {ext.routes.map((r) => (
+            <span key={r.path} style={routeTag}>{r.path}</span>
+          ))}
+        </Row>
+      )}
 
-      <Section title="Global Middleware">
-        {ext.global.middleware.length > 0 ? (
-          <div>
-            {ext.global.middleware.map((name) => (
-              <span key={name} style={styles.mwTag}>
-                {name}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <Empty />
-        )}
-      </Section>
+      <MiddlewareSection ext={ext} />
 
-      <Section title="Route Enhancements">
-        {ext.routeEnhancements.length > 0 ? (
-          <div>
-            {ext.routeEnhancements.map((enh) => (
-              <div key={enh.route} style={styles.enhancementRow}>
-                <span style={styles.enhancementRoute}>{enh.route}</span>
-                <span style={{ color: "#bbb" }}>&rarr;</span>
-                {enh.middleware.map((name) => (
-                  <span key={name} style={styles.mwTag}>
-                    {name}
-                  </span>
-                ))}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <Empty />
-        )}
-      </Section>
+      {ext.components.length > 0 && (
+        <Row label="Components">
+          {ext.components.map((name) => (
+            <span key={name} style={greenTag}>{name}</span>
+          ))}
+        </Row>
+      )}
 
-      <Section title="Components">
-        {ext.components.length > 0 ? (
-          <div>
-            {ext.components.map((name) => (
-              <span key={name} style={styles.tag(true)}>
-                {name}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <Empty />
-        )}
-      </Section>
-
-      <Section title="Client Entry">
-        {ext.clientEntry ? (
-          <span style={styles.tag(true)}>wrapApp</span>
-        ) : (
-          <Empty />
-        )}
-      </Section>
+      {ext.clientEntry && (
+        <Row label="Client">
+          <span style={greenTag}>wrapApp</span>
+        </Row>
+      )}
     </div>
   );
 }
@@ -216,15 +164,16 @@ export default function Devtools({ loaderData }: { loaderData: { extensions: Ext
   const { extensions } = loaderData;
 
   return (
-    <main style={styles.page}>
-      <h1 style={{ marginBottom: "0.25rem" }}>Extensions Devtools</h1>
-      <p style={{ color: "#666", marginBottom: "2rem" }}>
-        {extensions.length} extension{extensions.length !== 1 ? "s" : ""}{" "}
-        installed
-      </p>
+    <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 720, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 12 }}>
+        <h1 style={{ fontSize: "1.25rem", fontWeight: 700, margin: 0 }}>Extensions</h1>
+        <span style={{ fontSize: "0.8rem", color: "#999" }}>
+          {extensions.length} installed
+        </span>
+      </div>
 
       {extensions.length === 0 ? (
-        <p style={{ color: "#999" }}>No extensions installed.</p>
+        <p style={{ color: "#999", fontSize: "0.85rem" }}>No extensions installed.</p>
       ) : (
         extensions.map((ext: ExtensionMeta) => (
           <ExtensionCard key={ext.name} ext={ext} />

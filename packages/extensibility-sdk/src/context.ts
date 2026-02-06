@@ -6,6 +6,7 @@ import { createContext } from "react-router";
  */
 export interface ExtensionMeta {
   name: string;
+  version?: string;
   description?: string;
   author?: { name: string; url?: string };
   routes: { path: string }[];

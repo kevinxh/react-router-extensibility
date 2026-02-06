@@ -128,6 +128,7 @@ function buildExtensionsMeta(extensions: ExtensionDefinition[]): ExtensionMeta[]
 
     return {
       name: ext.name,
+      version: ext.version,
       description: ext.description,
       author: ext.author,
       routes,
