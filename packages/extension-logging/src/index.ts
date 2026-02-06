@@ -12,4 +12,8 @@ export default defineExtension(packageRoot, {
   author: { name: "Kevin He", url: "https://github.com/kevinxh" },
 
   middleware: ["./src/middleware/logging.ts"],
+
+  instrumentations: {
+    server: "./src/instrumentation/server.ts",
+  },
 });

@@ -142,6 +142,10 @@ function buildExtensionsMeta(extensions: ExtensionDefinition[]): ExtensionMeta[]
         beforeHydration: !!ext.clientHooks?.beforeHydration,
         afterHydration: !!ext.clientHooks?.afterHydration,
       },
+      instrumentations: {
+        server: !!ext.instrumentations?.server,
+        client: !!ext.instrumentations?.client,
+      },
     };
   });
 }
@@ -422,6 +426,59 @@ export function generateEntryClientProxy(
   lines.push(`}`);
   lines.push(``);
   lines.push(`_boot();`);
+
+  return lines.join("\n");
+}
+
+/**
+ * Generates proxy code for entry.server that adds extension instrumentations.
+ *
+ * The proxy:
+ * 1. Re-exports everything from the original entry.server via ?ext-original
+ * 2. Imports server instrumentation modules from extensions
+ * 3. Exports `unstable_instrumentations` array merging extension + original instrumentations
+ *
+ * Extension instrumentations come first (outermost wrapping), then the app's own.
+ */
+export function generateEntryServerProxy(
+  originalPath: string,
+  extensions: ExtensionDefinition[]
+): string {
+  const lines: string[] = [];
+
+  // Re-export everything from original entry.server
+  lines.push(
+    `export * from "${originalPath}?ext-original";`,
+    `export { default } from "${originalPath}?ext-original";`,
+    ``
+  );
+
+  // Import namespace to access original instrumentations if they exist
+  lines.push(`import * as _original from "${originalPath}?ext-original";`);
+  lines.push(``);
+
+  // Import extension server instrumentation modules
+  const instVars: string[] = [];
+  let instIndex = 0;
+  for (const ext of extensions) {
+    if (ext.instrumentations?.server) {
+      const absPath = resolve(ext._resolvedDir, ext.instrumentations.server);
+      const varName = `_inst${instIndex}`;
+      lines.push(`import ${varName} from "${absPath}";`);
+      instVars.push(varName);
+      instIndex++;
+    }
+  }
+
+  lines.push(``);
+
+  // Export merged instrumentations: extension first, then original
+  lines.push(
+    `export const unstable_instrumentations = [`,
+    `  ${instVars.join(", ")}${instVars.length > 0 ? "," : ""}`,
+    `  ...(_original.unstable_instrumentations ?? []),`,
+    `];`
+  );
 
   return lines.join("\n");
 }

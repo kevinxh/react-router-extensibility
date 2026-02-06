@@ -88,6 +88,21 @@ export interface ExtensionDefinition {
     afterHydration?: string;
   };
 
+  /**
+   * React Router instrumentations — read-only observation hooks for
+   * server requests, client navigations, and route handler execution.
+   * Module paths are relative to the extension directory.
+   *
+   * - `server` — default-exports `unstable_ServerInstrumentation` ({ handler?, route? })
+   *   Exported as `unstable_instrumentations` from entry.server.tsx
+   * - `client` — default-exports `unstable_ClientInstrumentation` ({ router?, route? })
+   *   Passed as prop to `<HydratedRouter>`
+   */
+  instrumentations?: {
+    server?: string;
+    client?: string;
+  };
+
 }
 
 /**

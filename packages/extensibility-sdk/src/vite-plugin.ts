@@ -7,6 +7,7 @@ import {
   generateRootProxy,
   generateRouteProxy,
   generateEntryClientProxy,
+  generateEntryServerProxy,
 } from "./codegen.js";
 
 /**
@@ -82,14 +83,44 @@ function findEntryClientPath(appDirectory: string): {
   return { path: defaultPath, isDefault: true };
 }
 
+/**
+ * Finds the entry.server file path, replicating RR7's resolution logic.
+ * Returns the user's file if it exists, otherwise the RR7 default (Node.js).
+ */
+function findEntryServerPath(appDirectory: string): {
+  path: string;
+  isDefault: boolean;
+} {
+  const exts = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".mts"];
+  for (const ext of exts) {
+    const p = resolve(appDirectory, `entry.server${ext}`);
+    if (existsSync(p)) return { path: p, isDefault: false };
+  }
+  // Fall back to RR7's default entry.server (Node.js runtime)
+  const require = createRequire(import.meta.url);
+  const rrDevPkgPath = require.resolve("@react-router/dev/package.json");
+  const defaultPath = resolve(
+    dirname(rrDevPkgPath),
+    "dist",
+    "config",
+    "defaults",
+    "entry.server.node.tsx"
+  );
+  return { path: defaultPath, isDefault: true };
+}
+
 export function extensibilityPlugin(
   options: ExtensibilityPluginOptions
 ): Plugin[] {
   const { extensions } = options;
   let appDirectory: string;
   let entryClientInfo: { path: string; isDefault: boolean };
+  let entryServerInfo: { path: string; isDefault: boolean };
   const hasClientHooks = extensions.some(
     (ext) => ext.clientHooks?.beforeHydration || ext.clientHooks?.afterHydration
+  );
+  const hasServerInstrumentations = extensions.some(
+    (ext) => ext.instrumentations?.server
   );
 
   return [
@@ -101,6 +132,7 @@ export function extensibilityPlugin(
         const root = userConfig.root ?? process.cwd();
         appDirectory = resolve(root, "app");
         entryClientInfo = findEntryClientPath(appDirectory);
+        entryServerInfo = findEntryServerPath(appDirectory);
 
         return {
           ssr: {
@@ -137,6 +169,11 @@ export function extensibilityPlugin(
             entryClientInfo.isDefault,
             extensions
           );
+        }
+
+        // Proxy entry.server — add extension server instrumentations
+        if (hasServerInstrumentations && id === entryServerInfo.path) {
+          return generateEntryServerProxy(entryServerInfo.path, extensions);
         }
 
         // Proxy root.tsx — inject extension metadata context + global middleware

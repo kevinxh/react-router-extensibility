@@ -23,6 +23,10 @@ export interface ExtensionMeta {
     beforeHydration: boolean;
     afterHydration: boolean;
   };
+  instrumentations: {
+    server: boolean;
+    client: boolean;
+  };
 }
 
 /**

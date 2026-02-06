@@ -232,6 +232,21 @@ function ExtensionCard({
         )}
       </Row>
 
+      <Row label="Instrumentations">
+        {ext.instrumentations?.server || ext.instrumentations?.client ? (
+          <>
+            {ext.instrumentations.server && (
+              <span style={mwTag}>server</span>
+            )}
+            {ext.instrumentations.client && (
+              <span style={clientTag}>client</span>
+            )}
+          </>
+        ) : (
+          <Dim>None</Dim>
+        )}
+      </Row>
+
     </div>
   );
 }
