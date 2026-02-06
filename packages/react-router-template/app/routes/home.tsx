@@ -1,5 +1,5 @@
 import type { Route } from "./+types/home";
-import { Welcome } from "../welcome/welcome";
+import { Link } from "react-router";
 import { getExtensionContext } from "extensibility-sdk/context";
 import type { AuthContextValue } from "extension-auth/types";
 
@@ -62,7 +62,31 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
       )}
-      <Welcome />
+      <main className="flex items-center justify-center pt-16 pb-4">
+        <div className="flex-1 flex flex-col items-center gap-12 min-h-0">
+          <h1 className="text-5xl font-bold text-gray-900 text-center">
+            Extensibility Demo
+          </h1>
+          <div className="flex flex-col gap-4 w-full max-w-md px-4">
+            <Link
+              to="/about"
+              className="block text-center text-xl font-medium text-blue-700 hover:text-blue-900 border border-gray-200 rounded-2xl p-6 hover:bg-gray-50 transition-colors"
+            >
+              <span className="text-sm text-gray-400">(extension-about-page)</span>
+              <br />
+              About
+            </Link>
+            <Link
+              to="/__sfnext-devtools"
+              className="block text-center text-xl font-medium text-blue-700 hover:text-blue-900 border border-gray-200 rounded-2xl p-6 hover:bg-gray-50 transition-colors"
+            >
+              <span className="text-sm text-gray-400">(extension-devtools)</span>
+              <br />
+              Devtools
+            </Link>
+          </div>
+        </div>
+      </main>
     </>
   );
 }
