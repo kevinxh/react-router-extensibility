@@ -66,35 +66,37 @@ function MiddlewareSection({ ext }: { ext: ExtensionMeta }) {
   const hasGlobal = ext.global.middleware.length > 0;
   const hasRouteSpecific = ext.routeEnhancements.length > 0;
 
-  if (!hasGlobal && !hasRouteSpecific) return null;
-
   return (
     <div style={{ marginTop: 4 }}>
       <Label>Middleware</Label>
-      <div style={{ paddingLeft: 2, marginTop: 2 }}>
-        {hasGlobal && (
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-            <span style={{ fontSize: "0.7rem", color: "#aaa", minWidth: 50 }}>global</span>
-            <div>
-              {ext.global.middleware.map((name) => (
-                <span key={name} style={mwTag}>{name}</span>
-              ))}
+      {!hasGlobal && !hasRouteSpecific ? (
+        <div style={{ paddingLeft: 2, marginTop: 2 }}><Dim>None</Dim></div>
+      ) : (
+        <div style={{ paddingLeft: 2, marginTop: 2 }}>
+          {hasGlobal && (
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+              <span style={{ fontSize: "0.7rem", color: "#aaa", minWidth: 50 }}>global</span>
+              <div>
+                {ext.global.middleware.map((name) => (
+                  <span key={name} style={mwTag}>{name}</span>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-        {ext.routeEnhancements.map((enh) => (
-          <div key={enh.route} style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
-            <span style={{ fontSize: "0.7rem", fontFamily: "monospace", color: "#4338ca", minWidth: 50 }}>
-              {enh.route}
-            </span>
-            <div>
-              {enh.middleware.map((name) => (
-                <span key={name} style={mwTag}>{name}</span>
-              ))}
+          )}
+          {ext.routeEnhancements.map((enh) => (
+            <div key={enh.route} style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 2 }}>
+              <span style={{ fontSize: "0.7rem", fontFamily: "monospace", color: "#4338ca", minWidth: 50 }}>
+                {enh.route}
+              </span>
+              <div>
+                {enh.middleware.map((name) => (
+                  <span key={name} style={mwTag}>{name}</span>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -133,29 +135,35 @@ function ExtensionCard({ ext }: { ext: ExtensionMeta }) {
         </div>
       )}
 
-      {ext.routes.length > 0 && (
-        <Row label="Routes">
-          {ext.routes.map((r) => (
+      <Row label="Routes">
+        {ext.routes.length > 0 ? (
+          ext.routes.map((r) => (
             <span key={r.path} style={routeTag}>{r.path}</span>
-          ))}
-        </Row>
-      )}
+          ))
+        ) : (
+          <Dim>None</Dim>
+        )}
+      </Row>
 
       <MiddlewareSection ext={ext} />
 
-      {ext.components.length > 0 && (
-        <Row label="Components">
-          {ext.components.map((name) => (
+      <Row label="Components">
+        {ext.components.length > 0 ? (
+          ext.components.map((name) => (
             <span key={name} style={greenTag}>{name}</span>
-          ))}
-        </Row>
-      )}
+          ))
+        ) : (
+          <Dim>None</Dim>
+        )}
+      </Row>
 
-      {ext.clientEntry && (
-        <Row label="Client">
+      <Row label="Client">
+        {ext.clientEntry ? (
           <span style={greenTag}>wrapApp</span>
-        </Row>
-      )}
+        ) : (
+          <Dim>None</Dim>
+        )}
+      </Row>
     </div>
   );
 }
