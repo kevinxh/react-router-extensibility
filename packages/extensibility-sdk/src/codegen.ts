@@ -128,6 +128,8 @@ function buildExtensionsMeta(extensions: ExtensionDefinition[]): ExtensionMeta[]
 
     return {
       name: ext.name,
+      description: ext.description,
+      author: ext.author,
       routes,
       global: { middleware: globalMiddleware },
       routeEnhancements,

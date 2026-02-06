@@ -7,6 +7,8 @@ const packageRoot = resolve(__dirname, "..");
 
 export default defineExtension(packageRoot, {
   name: "extension-devtools",
+  description: "Developer tools for inspecting installed extensions.",
+  author: { name: "@salesforce", url: "https://npmjs.com/package/@salesforce" },
 
   routes: ({ route }) => [route("__sfnext-devtools", "./src/routes/devtools.tsx")],
 });

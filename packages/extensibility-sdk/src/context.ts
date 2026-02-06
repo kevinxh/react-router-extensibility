@@ -6,6 +6,8 @@ import { createContext } from "react-router";
  */
 export interface ExtensionMeta {
   name: string;
+  description?: string;
+  author?: { name: string; url?: string };
   routes: { path: string }[];
   global: {
     middleware: string[];

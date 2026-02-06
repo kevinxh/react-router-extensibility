@@ -121,6 +121,24 @@ function ExtensionCard({ ext }: { ext: ExtensionMeta }) {
     <div style={styles.card}>
       <h2 style={styles.extName}>{ext.name}</h2>
 
+      {ext.description && (
+        <p style={{ color: "#555", fontSize: "0.9rem", margin: "0 0 1rem" }}>
+          {ext.description}
+        </p>
+      )}
+
+      {ext.author && (
+        <Section title="Author">
+          {ext.author.url ? (
+            <a href={ext.author.url} style={{ color: "#4338ca", fontSize: "0.85rem" }}>
+              {ext.author.name}
+            </a>
+          ) : (
+            <span style={{ fontSize: "0.85rem" }}>{ext.author.name}</span>
+          )}
+        </Section>
+      )}
+
       <Section title="Routes">
         {ext.routes.length > 0 ? (
           <div>

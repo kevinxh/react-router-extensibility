@@ -7,9 +7,20 @@ export interface RouteHelpers {
   prefix: typeof import("@react-router/dev/routes").prefix;
 }
 
+export interface ExtensionAuthor {
+  name: string;
+  url?: string;
+}
+
 export interface ExtensionDefinition {
   /** Unique name for the extension */
   name: string;
+
+  /** Short description of what this extension does */
+  description?: string;
+
+  /** Author of this extension */
+  author?: ExtensionAuthor;
 
   /** Resolved directory for this extension (set by defineExtension) */
   _resolvedDir: string;
