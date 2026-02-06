@@ -136,6 +136,7 @@ function buildExtensionsMeta(extensions: ExtensionDefinition[]): ExtensionMeta[]
       routeEnhancements,
       components,
       clientEntry: !!ext.clientEntry,
+      context: !!ext.context,
     };
   });
 }
@@ -203,7 +204,8 @@ export function generateRouteProxy(
  * 2. Imports namespace from original to access any existing middleware
  * 3. Imports extension middleware files by absolute path
  * 4. Generates an inline SDK middleware that injects extension metadata into context
- * 5. Exports composed middleware: [SDK metadata mw, ...extension mw, ...original mw]
+ * 5. Generates an inline snapshot middleware that captures per-extension context values
+ * 6. Exports composed middleware: [SDK metadata mw, ...extension mw, snapshot mw, ...original mw]
  */
 export function generateRootProxy(
   originalPath: string,
@@ -224,8 +226,10 @@ export function generateRootProxy(
   // Import namespace to access original middleware if it exists
   lines.push(`import * as _original from "${originalPath}?ext-original";`);
 
-  // Import SDK context key
-  lines.push(`import { extensionsContext } from "extensibility-sdk/context";`);
+  // Import SDK context keys
+  lines.push(
+    `import { extensionsContext, extensionContextStore, extensionContextValues } from "extensibility-sdk/context";`
+  );
   lines.push(``);
 
   // Import extension middleware files
@@ -243,21 +247,42 @@ export function generateRootProxy(
 
   lines.push(``);
 
-  // Generate inline metadata middleware
+  // Generate inline metadata middleware — sets extension metadata + initializes context store
   const meta = buildExtensionsMeta(extensions);
   lines.push(
-    `// SDK middleware — injects extension metadata into RR7 context`,
+    `// SDK middleware — injects extension metadata and initializes context store`,
     `function _extensionsMetadataMiddleware(args, next) {`,
     `  args.context.set(extensionsContext, ${JSON.stringify(meta)});`,
+    `  args.context.set(extensionContextStore, new Map());`,
     `  return next();`,
     `}`,
     ``
   );
 
-  // Compose middleware: SDK metadata first, then extension middleware, then original
+  // Generate snapshot middleware — captures per-extension context values after extension MW runs
+  lines.push(
+    `// SDK middleware — captures per-extension context values for devtools`,
+    `function _contextSnapshotMiddleware(args, next) {`,
+    `  const _store = args.context.get(extensionContextStore);`,
+    `  const _snapshot = [];`,
+    `  for (const [name, value] of _store) {`,
+    `    try {`,
+    `      _snapshot.push({ extension: name, value: JSON.parse(JSON.stringify(value)) });`,
+    `    } catch(e) {`,
+    `      _snapshot.push({ extension: name, value: "[unserializable]" });`,
+    `    }`,
+    `  }`,
+    `  args.context.set(extensionContextValues, _snapshot);`,
+    `  return next();`,
+    `}`,
+    ``
+  );
+
+  // Compose middleware: SDK metadata first, then extension middleware, then snapshot, then original
   const allMiddleware = [
     `_extensionsMetadataMiddleware`,
     ...middlewareImports,
+    `_contextSnapshotMiddleware`,
     `...(_original.middleware ?? [])`,
   ];
 

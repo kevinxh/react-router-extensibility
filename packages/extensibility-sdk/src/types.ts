@@ -53,6 +53,14 @@ export interface ExtensionDefinition {
   >;
 
   /**
+   * Declares that this extension provides context values.
+   * Set to `true` to indicate the extension's middleware will call
+   * `setExtensionContext()` to inject data into the RR7 context.
+   * The SDK captures these values for devtools inspection.
+   */
+  context?: boolean;
+
+  /**
    * React components provided by this extension.
    * Map of component name to module path (relative to extension directory).
    */

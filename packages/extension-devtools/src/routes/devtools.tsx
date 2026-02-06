@@ -1,4 +1,9 @@
-import { extensionsContext, type ExtensionMeta } from "extensibility-sdk/context";
+import {
+  extensionsContext,
+  extensionContextValues,
+  type ExtensionMeta,
+  type ExtensionContextSnapshot,
+} from "extensibility-sdk/context";
 
 export function meta() {
   return [
@@ -9,7 +14,8 @@ export function meta() {
 
 export async function loader({ context }: { context: Map<unknown, unknown> }) {
   const extensions = context.get(extensionsContext) as ExtensionMeta[];
-  return { extensions };
+  const contextValues = context.get(extensionContextValues) as ExtensionContextSnapshot[];
+  return { extensions, contextValues };
 }
 
 const tag = (bg: string, fg: string, border: string): React.CSSProperties => ({
@@ -30,6 +36,7 @@ const routeTag = tag("#eef2ff", "#4338ca", "#c7d2fe");
 const mwTag = tag("#fef3c7", "#92400e", "#fcd34d");
 const greenTag = tag("#e6f4ea", "#1a7f37", "#a3d9b1");
 const dimTag = tag("#f5f5f5", "#999", "#e0e0e0");
+const ctxTag = tag("#fce7f3", "#9d174d", "#f9a8d4");
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -101,7 +108,58 @@ function MiddlewareSection({ ext }: { ext: ExtensionMeta }) {
   );
 }
 
-function ExtensionCard({ ext }: { ext: ExtensionMeta }) {
+function ContextSection({
+  ext,
+  contextValues,
+}: {
+  ext: ExtensionMeta;
+  contextValues: ExtensionContextSnapshot[];
+}) {
+  const snapshot = contextValues.find((cv) => cv.extension === ext.name);
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <Row label="Context">
+        {ext.context ? (
+          <span style={ctxTag}>provider</span>
+        ) : (
+          <Dim>None</Dim>
+        )}
+      </Row>
+      {snapshot && (
+        <div
+          style={{
+            marginTop: 4,
+            marginLeft: 78,
+            background: "#fdf2f8",
+            border: "1px solid #f9a8d4",
+            borderRadius: 4,
+            padding: "6px 10px",
+            fontSize: "0.7rem",
+            fontFamily: "monospace",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-all",
+            color: "#831843",
+            maxHeight: 200,
+            overflow: "auto",
+          }}
+        >
+          {typeof snapshot.value === "string"
+            ? snapshot.value
+            : JSON.stringify(snapshot.value, null, 2)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExtensionCard({
+  ext,
+  contextValues,
+}: {
+  ext: ExtensionMeta;
+  contextValues: ExtensionContextSnapshot[];
+}) {
   return (
     <div
       style={{
@@ -147,6 +205,8 @@ function ExtensionCard({ ext }: { ext: ExtensionMeta }) {
 
       <MiddlewareSection ext={ext} />
 
+      <ContextSection ext={ext} contextValues={contextValues} />
+
       <Row label="Components">
         {ext.components.length > 0 ? (
           ext.components.map((name) => (
@@ -168,8 +228,12 @@ function ExtensionCard({ ext }: { ext: ExtensionMeta }) {
   );
 }
 
-export default function Devtools({ loaderData }: { loaderData: { extensions: ExtensionMeta[] } }) {
-  const { extensions } = loaderData;
+export default function Devtools({
+  loaderData,
+}: {
+  loaderData: { extensions: ExtensionMeta[]; contextValues: ExtensionContextSnapshot[] };
+}) {
+  const { extensions, contextValues } = loaderData;
 
   return (
     <main style={{ padding: "1.5rem", fontFamily: "system-ui, sans-serif", maxWidth: 720, margin: "0 auto" }}>
@@ -184,7 +248,7 @@ export default function Devtools({ loaderData }: { loaderData: { extensions: Ext
         <p style={{ color: "#999", fontSize: "0.85rem" }}>No extensions installed.</p>
       ) : (
         extensions.map((ext: ExtensionMeta) => (
-          <ExtensionCard key={ext.name} ext={ext} />
+          <ExtensionCard key={ext.name} ext={ext} contextValues={contextValues} />
         ))
       )}
     </main>

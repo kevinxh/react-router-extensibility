@@ -118,7 +118,50 @@ export default defineExtension(packageRoot, {
 
 ---
 
-## Phase 4: Component Provision
+## Phase 4: Extension Context — SDK-Mediated Context API
+
+**Goal:** Extensions inject typed business logic into RR7 context via SDK helpers. The SDK captures all context values per-extension for devtools inspection and separation of concerns.
+
+**Design:** SDK-mediated approach — extensions call `setExtensionContext()` / `getExtensionContext()` instead of raw `context.set()` / `context.get()`. This gives the SDK full control: it intercepts every write, namespaces by extension name, and captures values for devtools.
+
+**How it works:**
+1. Extension middleware calls `setExtensionContext(args, "extension-auth", value)` — SDK stores the value in a single RR7 context Map keyed by extension name
+2. App or other extensions call `getExtensionContext<T>(context, "extension-auth")` to read typed values
+3. SDK's generated metadata middleware initializes the context store; a snapshot middleware placed after extension MW captures all values into `extensionContextValues` for devtools
+4. Devtools reads `extensionContextValues` and displays per-extension context
+
+**Middleware order:**
+```
+[metadataMW, ext_mw_0, ext_mw_1, snapshotMW, ...appMW]
+```
+
+**SDK API:**
+```ts
+// Extension middleware sets context
+import { setExtensionContext } from "extensibility-sdk/context";
+setExtensionContext(args, "extension-auth", { currentUser: { id: "1", name: "Alice" } });
+
+// App or another extension reads context
+import { getExtensionContext } from "extensibility-sdk/context";
+const auth = getExtensionContext<AuthContextValue>(context, "extension-auth");
+```
+
+| Package | File | Action |
+|---|---|---|
+| `extensibility-sdk` | `src/context.ts` | Add `extensionContextStore`, `extensionContextValues`, `setExtensionContext()`, `getExtensionContext()` |
+| `extensibility-sdk` | `src/codegen.ts` | Generate snapshot middleware in `generateRootProxy()` |
+| `extensibility-sdk` | `src/types.ts` | Add `context?: string` to `ExtensionDefinition` |
+| `extensibility-sdk` | `src/index.ts` | Export new context helpers |
+| `extension-auth` | `src/index.ts` | `defineExtension()` with context + middleware |
+| `extension-auth` | `src/middleware/auth.ts` | Middleware that calls `setExtensionContext()` |
+| `extension-auth` | `src/types.ts` | Exported `AuthContextValue` type for consumers |
+| `extension-devtools` | `src/routes/devtools.tsx` | Read + display per-extension context values |
+| `react-router-template` | `vite.config.ts`, `routes.ts` | Wire in `extension-auth` |
+| `react-router-template` | `app/routes/home.tsx` | Read auth context, display user info |
+
+---
+
+## Phase 5: Component Provision
 
 **Goal:** Extension provides React components via virtual module.
 
@@ -129,7 +172,7 @@ export default defineExtension(packageRoot, {
 
 ---
 
-## Phase 5: Client Entry Customization
+## Phase 6: Client Entry Customization
 
 **Goal:** Extension wraps app with providers at client entry.
 
