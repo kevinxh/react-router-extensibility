@@ -3,12 +3,26 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./vite": {
+      "import": "./dist/vite-plugin.js",
+      "types": "./dist/vite-plugin.d.ts"
+    },
+    "./routes": {
+      "import": "./dist/routes.js",
+      "types": "./dist/routes.d.ts"
+    },
+    "./context": {
+      "import": "./dist/context.js",
+      "types": "./dist/context.d.ts"
+    },
+    "./logger": {
+      "import": "./dist/logger.js",
+      "types": "./dist/logger.d.ts"
     }
   },
   "scripts": {
@@ -16,7 +30,15 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit"
   },
+  "peerDependencies": {
+    "@react-router/dev": ">=7",
+    "react-router": ">=7",
+    "vite": ">=6"
+  },
   "devDependencies": {
-    "typescript": "^5.9.2"
+    "@react-router/dev": "7.12.0",
+    "react-router": "7.12.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7"
   }
 }
