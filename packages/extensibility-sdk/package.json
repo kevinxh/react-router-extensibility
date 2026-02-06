@@ -15,6 +15,10 @@
     "./routes": {
       "import": "./dist/routes.js",
       "types": "./dist/routes.d.ts"
+    },
+    "./context": {
+      "import": "./dist/context.js",
+      "types": "./dist/context.d.ts"
     }
   },
   "scripts": {

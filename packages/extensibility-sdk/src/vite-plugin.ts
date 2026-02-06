@@ -1,6 +1,7 @@
 import type { Plugin } from "vite";
 import { resolve } from "node:path";
 import type { ExtensionDefinition } from "./types.js";
+import { generateRootProxy } from "./codegen.js";
 
 export interface ExtensibilityPluginOptions {
   extensions: ExtensionDefinition[];
@@ -51,7 +52,14 @@ export function extensibilityPlugin(
           return null;
         }
 
-        // Phase 2+: root.tsx and route module proxying will be added here
+        // Proxy root.tsx — inject global middleware from extensions
+        // Proxy root.tsx — inject extension metadata context + global middleware
+        const rootPath = resolve(appDirectory, "root.tsx");
+        if (id === rootPath) {
+          return generateRootProxy(rootPath, extensions);
+        }
+
+        // Phase 3+: route module proxying will be added here
 
         return null;
       },

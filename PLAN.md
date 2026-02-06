@@ -66,48 +66,42 @@ export default defineExtension(packageRoot, {
 
 ---
 
-## Phase 1: Vite Plugin + Route Injection
+## Phase 1: Vite Plugin + Route Injection — COMPLETE
 
 **Goal:** Extension adds a route. Visit `/about` and see the extension's page.
 
-**Status: In progress.** SDK core built. Extension-a built. Template integration in progress.
-
-| Package | File | Action | Status |
-|---|---|---|---|
-| `extensibility-sdk` | `src/types.ts` | `ExtensionDefinition`, `defineExtension()` | Done |
-| `extensibility-sdk` | `src/vite-plugin.ts` | Vite plugin skeleton | Done |
-| `extensibility-sdk` | `src/codegen.ts` | `generateRoutesProxy()` | Done (unused for Phase 1) |
-| `extensibility-sdk` | `src/routes.ts` | `withExtensions()` | Done |
-| `extensibility-sdk` | `package.json` | Peer deps, exports map | Done |
-| `extension-a` | `src/index.ts` | `defineExtension()` with route | Done |
-| `extension-a` | `src/routes/about.tsx` | Sample page | Done |
-| `react-router-template` | `vite.config.ts` | Add `extensibilityPlugin()` | Done |
-| `react-router-template` | `react-router.config.ts` | `v8_middleware: true` | Done |
-| `react-router-template` | `package.json` | Add `extension-a` dep | Done |
-| `react-router-template` | `app/routes.ts` | Use `withExtensions()` | **TODO** |
-
-### Verify
-
-```bash
-pnpm --filter extensibility-sdk build && pnpm --filter extension-a build
-pnpm --filter react-router-template dev
-# Visit localhost:5173/about → extension-a's about page renders
-```
+| Package | File | Action |
+|---|---|---|
+| `extensibility-sdk` | `src/types.ts` | `ExtensionDefinition`, `defineExtension()` |
+| `extensibility-sdk` | `src/vite-plugin.ts` | Vite plugin with config + proxy hooks |
+| `extensibility-sdk` | `src/codegen.ts` | `generateRoutesProxy()` (prepared for future) |
+| `extensibility-sdk` | `src/routes.ts` | `withExtensions()` |
+| `extension-a` | `src/index.ts` | `defineExtension()` with route |
+| `extension-a` | `src/routes/about.tsx` | Sample page |
+| `react-router-template` | `vite.config.ts` | `extensibilityPlugin()` |
+| `react-router-template` | `react-router.config.ts` | `v8_middleware: true` |
+| `react-router-template` | `app/routes.ts` | `withExtensions()` |
 
 ---
 
-## Phase 2: Global Middleware + Context Injection
+## Phase 2: Global Middleware + Context Injection — COMPLETE
 
-**Goal:** Extension adds global middleware to `root.tsx` via load hook proxy. Extension injects typed context.
+**Goal:** Extension adds global middleware to `root.tsx` via load hook proxy. SDK injects extension metadata into RR7 typed context.
+
+**How it works:** The Vite `load` hook intercepts `root.tsx` and returns a proxy module that:
+1. Re-exports everything from the original via `?ext-original` recursion breaker
+2. Imports extension middleware files by absolute path
+3. Generates an inline SDK middleware that sets `extensionsContext` in RR7 context
+4. Overrides the `middleware` export with the composed array
 
 | Package | File | Action |
 |---|---|---|
-| `extensibility-sdk` | `src/codegen.ts` | Add `generateRootProxy()` |
-| `extensibility-sdk` | `src/vite-plugin.ts` | Proxy `root.tsx` via `load` hook |
-| `extensibility-sdk` | `src/context.ts` | `createContextMiddleware()`, re-export `createContext` |
+| `extensibility-sdk` | `src/context.ts` | `extensionsContext` key, `ExtensionMeta` type |
+| `extensibility-sdk` | `src/codegen.ts` | `generateRootProxy()` |
+| `extensibility-sdk` | `src/vite-plugin.ts` | `load` hook proxies `root.tsx` |
 | `extension-a` | `src/middleware/auth.ts` | Global middleware (logs requests) |
-| `extension-a` | `src/middleware/context.ts` | Context middleware (injects typed value) |
-| `react-router-template` | `app/routes/home.tsx` | Loader reads context, renders value |
+| `extension-a` | `src/index.ts` | Added `middleware: ["./src/middleware/auth.ts"]` |
+| `react-router-template` | `app/routes/home.tsx` | Loader reads `context.get(extensionsContext)` |
 
 ---
 

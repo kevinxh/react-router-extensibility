@@ -9,4 +9,6 @@ export default defineExtension(packageRoot, {
   name: "extension-a",
 
   routes: ({ route }) => [route("about", "./src/routes/about.tsx")],
+
+  middleware: ["./src/middleware/auth.ts"],
 });

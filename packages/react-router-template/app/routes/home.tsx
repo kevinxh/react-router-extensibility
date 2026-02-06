@@ -1,7 +1,5 @@
 import type { Route } from "./+types/home";
-import extensionA from "extension-a";
-
-const extensions = [extensionA];
+import { extensionsContext } from "extensibility-sdk/context";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -10,23 +8,9 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export async function loader() {
-  // TODO: This is temporary. In Phase 2, the SDK will inject extension metadata
-  // into React Router context via global middleware, so the template can access it
-  // via context.get(extensionsContext) without importing extension packages directly.
-  return {
-    extensions: extensions.map((ext) => ({
-      name: ext.name,
-      dir: ext._resolvedDir,
-      capabilities: {
-        routes: !!ext.routes,
-        middleware: (ext.middleware ?? []).length > 0,
-        routeEnhancements: Object.keys(ext.routeEnhancements ?? {}).length > 0,
-        components: Object.keys(ext.components ?? {}).length > 0,
-        clientEntry: !!ext.clientEntry,
-      },
-    })),
-  };
+export async function loader({ context }: Route.LoaderArgs) {
+  const extensions = context.get(extensionsContext);
+  return { extensions };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
@@ -52,7 +36,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         extensions.map(
           (ext: {
             name: string;
-            dir: string;
             capabilities: Record<string, boolean>;
           }) => (
             <div
@@ -64,17 +47,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 marginBottom: "1rem",
               }}
             >
-              <h2 style={{ margin: "0 0 0.25rem" }}>{ext.name}</h2>
-              <p
-                style={{
-                  fontSize: "0.8rem",
-                  color: "#999",
-                  margin: "0 0 0.75rem",
-                  fontFamily: "monospace",
-                }}
-              >
-                {ext.dir}
-              </p>
+              <h2 style={{ margin: "0 0 0.5rem" }}>{ext.name}</h2>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                 {Object.entries(ext.capabilities).map(([cap, enabled]) => (
                   <span
