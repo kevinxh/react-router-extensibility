@@ -31,10 +31,9 @@ export default async function bopisMiddleware(
 
   setExtensionContext(args, "extension-bopis", bopisContext);
 
+  const storeName = preferredStore ? preferredStore.name : "none";
   console.log(
-    `[bopis] Preferred store: ${
-      preferredStore ? preferredStore.name : "none"
-    }, delivery: ${bopisContext.deliveryOption}`
+    `    \x1b[2m[bopis]\x1b[22m    ${storeName} \x1b[2m· ${bopisContext.deliveryOption}\x1b[22m`
   );
 
   return next();

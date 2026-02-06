@@ -17,7 +17,7 @@ export default async function authMiddleware(
 
   setExtensionContext(args, "extension-auth", user);
 
-  console.log(`[auth] User: ${user.currentUser?.name} (${user.currentUser?.role})`);
+  console.log(`    \x1b[2m[auth]\x1b[22m     ${user.currentUser?.name} \x1b[2m(${user.currentUser?.role})\x1b[22m`);
 
   return next();
 }
