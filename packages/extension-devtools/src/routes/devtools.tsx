@@ -189,9 +189,13 @@ function ExtensionCard({
 
       <Row label="Routes">
         {ext.routes.length > 0 ? (
-          ext.routes.map((r) => (
-            <a key={r.path} href={r.path} style={{ ...routeTag, textDecoration: "none" }}>{r.path}</a>
-          ))
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {ext.routes.map((r) => (
+              <a key={r.path} href={r.path} style={{ ...routeTag, textDecoration: "none", width: "fit-content" }}>
+                {r.path}
+              </a>
+            ))}
+          </div>
         ) : (
           <Dim>None</Dim>
         )}

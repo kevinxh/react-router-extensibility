@@ -11,5 +11,8 @@ export default defineExtension(packageRoot, {
   description: "This is a DEMO extension that showcase a simple new page.",
   author: { name: "Kevin He", url: "https://github.com/kevinxh" },
 
-  routes: ({ route }) => [route("about", "./src/routes/about.tsx")],
+  routes: ({ route }) => [
+    route("about", "./src/routes/about.tsx"),
+    route("privacy", "./src/routes/privacy.tsx"),
+  ],
 });
