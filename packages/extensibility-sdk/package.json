@@ -19,6 +19,10 @@
     "./context": {
       "import": "./dist/context.js",
       "types": "./dist/context.d.ts"
+    },
+    "./logger": {
+      "import": "./dist/logger.js",
+      "types": "./dist/logger.d.ts"
     }
   },
   "scripts": {

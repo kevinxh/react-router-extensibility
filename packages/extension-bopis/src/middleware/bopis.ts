@@ -1,6 +1,9 @@
 import { setExtensionContext } from "extensibility-sdk/context";
+import { createLogger } from "extensibility-sdk/logger";
 import type { BopisContextValue } from "../types.js";
 import { findStoreById, MOCK_STORES } from "../data/stores.js";
+
+const log = createLogger("extension-bopis");
 
 const COOKIE_NAME = "bopis_preferred_store";
 
@@ -32,9 +35,7 @@ export default async function bopisMiddleware(
   setExtensionContext(args, "extension-bopis", bopisContext);
 
   const storeName = preferredStore ? preferredStore.name : "none";
-  console.log(
-    `    \x1b[2m[bopis]\x1b[22m    ${storeName} \x1b[2m· ${bopisContext.deliveryOption}\x1b[22m`
-  );
+  log.info(`${storeName} · ${bopisContext.deliveryOption}`);
 
   return next();
 }

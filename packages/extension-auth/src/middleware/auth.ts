@@ -1,5 +1,8 @@
 import { setExtensionContext } from "extensibility-sdk/context";
+import { createLogger } from "extensibility-sdk/logger";
 import type { AuthContextValue } from "../types.js";
+
+const log = createLogger("extension-auth");
 
 export default async function authMiddleware(
   args: { request: Request; context: { get: Function; set: Function } },
@@ -17,7 +20,7 @@ export default async function authMiddleware(
 
   setExtensionContext(args, "extension-auth", user);
 
-  console.log(`    \x1b[2m[auth]\x1b[22m     ${user.currentUser?.name} \x1b[2m(${user.currentUser?.role})\x1b[22m`);
+  log.info(`${user.currentUser?.name} (${user.currentUser?.role})`);
 
   return next();
 }

@@ -1,6 +1,6 @@
-const dim = (s: string) => `\x1b[2m${s}\x1b[22m`;
-const yellow = (s: string) => `\x1b[33m${s}\x1b[39m`;
-const green = (s: string) => `\x1b[32m${s}\x1b[39m`;
+import { createLogger } from "extensibility-sdk/logger";
+
+const log = createLogger("extension-logging");
 
 export default async function loggingMiddleware(
   args: { request: Request },
@@ -10,13 +10,11 @@ export default async function loggingMiddleware(
   const label = `${args.request.method} ${url.pathname}`;
   const start = Date.now();
 
-  console.log(`    ${dim("[logging]")}  → ${label}`);
+  log.info(`→ ${label}`);
 
   const response = await next();
   const duration = Date.now() - start;
 
-  console.log(
-    `    ${dim("[logging]")}  ← ${green(String(response.status))} ${label} ${dim("(")}${yellow(duration + "ms")}${dim(")")}`
-  );
+  log.info(`← ${response.status} ${label} (${duration}ms)`);
   return response;
 }
