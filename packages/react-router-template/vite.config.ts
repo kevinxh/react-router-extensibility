@@ -5,11 +5,12 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { extensibilityPlugin } from "extensibility-sdk/vite";
 import extensionAboutPage from "extension-about-page";
 import extensionDevtools from "extension-devtools";
+import extensionLogging from "extension-logging";
 
 export default defineConfig({
   plugins: [
     tailwindcss(),
-    extensibilityPlugin({ extensions: [extensionAboutPage, extensionDevtools] }),
+    extensibilityPlugin({ extensions: [extensionAboutPage, extensionDevtools, extensionLogging] }),
     reactRouter(),
     tsconfigPaths(),
   ],
