@@ -123,9 +123,6 @@ function buildExtensionsMeta(extensions: ExtensionDefinition[]): ExtensionMeta[]
       })
     );
 
-    // Extract component names
-    const components = Object.keys(ext.components ?? {});
-
     // Extract action metadata
     const actions = Object.entries(ext.actions ?? {}).map(
       ([name, def]) => ({ name, description: def.description })
@@ -140,8 +137,6 @@ function buildExtensionsMeta(extensions: ExtensionDefinition[]): ExtensionMeta[]
       global: { middleware: globalMiddleware },
       routeEnhancements,
       actions,
-      components,
-      clientEntry: !!ext.clientEntry,
       context: !!ext.context,
     };
   });

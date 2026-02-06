@@ -74,19 +74,6 @@ export interface ExtensionDefinition {
     }
   >;
 
-  /**
-   * React components provided by this extension.
-   * Map of component name to module path (relative to extension directory).
-   */
-  components?: Record<string, string>;
-
-  /**
-   * Client entry customization.
-   * Module path (relative to extension directory) that exports a wrapApp function.
-   */
-  clientEntry?: {
-    wrapApp?: string;
-  };
 }
 
 /**

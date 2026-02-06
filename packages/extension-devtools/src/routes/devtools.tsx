@@ -34,7 +34,6 @@ const tag = (bg: string, fg: string, border: string): React.CSSProperties => ({
 
 const routeTag = tag("#eef2ff", "#4338ca", "#c7d2fe");
 const mwTag = tag("#fef3c7", "#92400e", "#fcd34d");
-const greenTag = tag("#e6f4ea", "#1a7f37", "#a3d9b1");
 const dimTag = tag("#f5f5f5", "#999", "#e0e0e0");
 const ctxTag = tag("#fce7f3", "#9d174d", "#f9a8d4");
 const actionTag = tag("#ede9fe", "#6d28d9", "#c4b5fd");
@@ -217,23 +216,6 @@ function ExtensionCard({
         )}
       </Row>
 
-      <Row label="Components">
-        {ext.components.length > 0 ? (
-          ext.components.map((name) => (
-            <span key={name} style={greenTag}>{name}</span>
-          ))
-        ) : (
-          <Dim>None</Dim>
-        )}
-      </Row>
-
-      <Row label="Client">
-        {ext.clientEntry ? (
-          <span style={greenTag}>wrapApp</span>
-        ) : (
-          <Dim>None</Dim>
-        )}
-      </Row>
     </div>
   );
 }

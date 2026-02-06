@@ -18,8 +18,6 @@ export interface ExtensionMeta {
     middleware: string[];
   }[];
   actions: { name: string; description?: string }[];
-  components: string[];
-  clientEntry: boolean;
   context: boolean;
 }
 
