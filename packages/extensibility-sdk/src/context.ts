@@ -19,6 +19,10 @@ export interface ExtensionMeta {
   }[];
   actions: { name: string; description?: string }[];
   context: boolean;
+  clientHooks: {
+    beforeHydration: boolean;
+    afterHydration: boolean;
+  };
 }
 
 /**

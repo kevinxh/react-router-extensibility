@@ -15,6 +15,7 @@
     "extension-auth": "workspace:*",
     "extension-bopis": "workspace:*",
     "extension-devtools": "workspace:*",
+    "extension-google-analytics": "workspace:*",
     "extension-logging": "workspace:*",
     "extensibility-sdk": "workspace:*",
     "isbot": "^5.1.31",

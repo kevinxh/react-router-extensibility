@@ -5,11 +5,12 @@ import extensionAuth from "extension-auth";
 import extensionBopis from "extension-bopis";
 import extensionDevtools from "extension-devtools";
 import extensionLogging from "extension-logging";
+import extensionGoogleAnalytics from "extension-google-analytics";
 
 export default withExtensions(
   [
     index("routes/home.tsx"),
     route("product/:productId", "routes/product.$productId.tsx"),
   ],
-  [extensionAboutPage, extensionAuth, extensionBopis, extensionDevtools, extensionLogging]
+  [extensionAboutPage, extensionAuth, extensionBopis, extensionDevtools, extensionLogging, extensionGoogleAnalytics]
 ) satisfies RouteConfig;

@@ -74,6 +74,20 @@ export interface ExtensionDefinition {
     }
   >;
 
+  /**
+   * Client-side hooks that run around React hydration.
+   * Module paths are relative to the extension directory.
+   * Each module should export a default function (sync or async).
+   *
+   * - `beforeHydration` — runs before `hydrateRoot()` is called
+   * - `afterHydration` — runs after `hydrateRoot()` is called
+   *   (note: React hydration itself is async via `startTransition`)
+   */
+  clientHooks?: {
+    beforeHydration?: string;
+    afterHydration?: string;
+  };
+
 }
 
 /**

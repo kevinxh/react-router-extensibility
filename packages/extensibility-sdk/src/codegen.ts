@@ -138,6 +138,10 @@ function buildExtensionsMeta(extensions: ExtensionDefinition[]): ExtensionMeta[]
       routeEnhancements,
       actions,
       context: !!ext.context,
+      clientHooks: {
+        beforeHydration: !!ext.clientHooks?.beforeHydration,
+        afterHydration: !!ext.clientHooks?.afterHydration,
+      },
     };
   });
 }
@@ -327,6 +331,97 @@ export function generateRootProxy(
   ];
 
   lines.push(`export const middleware = [${allMiddleware.join(", ")}];`);
+
+  return lines.join("\n");
+}
+
+/**
+ * Generates proxy code for entry.client that wraps hydration with extension hooks.
+ *
+ * Two modes:
+ * - `isDefault: true` — inlines the standard hydration code using createElement (no JSX)
+ * - `isDefault: false` — dynamic-imports the user's entry.client via ?ext-original
+ *
+ * Hooks run in extension array order. afterHydration runs after hydrateRoot() is
+ * called, not after React finishes hydrating (hydration is async via startTransition).
+ */
+export function generateEntryClientProxy(
+  originalPath: string,
+  isDefault: boolean,
+  extensions: ExtensionDefinition[]
+): string {
+  const lines: string[] = [];
+
+  // Collect before/after hooks from all extensions
+  const beforeHooks: { varName: string; path: string }[] = [];
+  const afterHooks: { varName: string; path: string }[] = [];
+  let hookIndex = 0;
+
+  for (const ext of extensions) {
+    if (ext.clientHooks?.beforeHydration) {
+      const varName = `_before${hookIndex}`;
+      beforeHooks.push({
+        varName,
+        path: resolve(ext._resolvedDir, ext.clientHooks.beforeHydration),
+      });
+      hookIndex++;
+    }
+    if (ext.clientHooks?.afterHydration) {
+      const varName = `_after${hookIndex}`;
+      afterHooks.push({
+        varName,
+        path: resolve(ext._resolvedDir, ext.clientHooks.afterHydration),
+      });
+      hookIndex++;
+    }
+  }
+
+  // Import hooks
+  for (const hook of [...beforeHooks, ...afterHooks]) {
+    lines.push(`import ${hook.varName} from "${hook.path}";`);
+  }
+
+  if (isDefault) {
+    // Inline the standard hydration code — use createElement to avoid JSX transform issues
+    lines.push(
+      `import { startTransition, createElement, StrictMode } from "react";`,
+      `import { hydrateRoot } from "react-dom/client";`,
+      `import { HydratedRouter } from "react-router/dom";`,
+      ``
+    );
+  }
+
+  lines.push(``);
+  lines.push(`async function _boot() {`);
+
+  // Before-hydration calls
+  for (const hook of beforeHooks) {
+    lines.push(`  await ${hook.varName}();`);
+  }
+
+  if (isDefault) {
+    // Inline hydration
+    lines.push(
+      `  startTransition(() => {`,
+      `    hydrateRoot(`,
+      `      document,`,
+      `      createElement(StrictMode, null, createElement(HydratedRouter))`,
+      `    );`,
+      `  });`
+    );
+  } else {
+    // Dynamic-import user's entry.client (side-effect module that does hydration)
+    lines.push(`  await import("${originalPath}?ext-original");`);
+  }
+
+  // After-hydration calls
+  for (const hook of afterHooks) {
+    lines.push(`  await ${hook.varName}();`);
+  }
+
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`_boot();`);
 
   return lines.join("\n");
 }

@@ -1,8 +1,13 @@
 import type { Plugin } from "vite";
-import { resolve } from "node:path";
-import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import type { ExtensionDefinition } from "./types.js";
-import { generateRootProxy, generateRouteProxy } from "./codegen.js";
+import {
+  generateRootProxy,
+  generateRouteProxy,
+  generateEntryClientProxy,
+} from "./codegen.js";
 
 /**
  * Known RR7 route module exports. We detect these in the original source
@@ -51,11 +56,41 @@ export interface ExtensibilityPluginOptions {
 
 const EXT_ORIGINAL_QUERY = "?ext-original";
 
+/**
+ * Finds the entry.client file path, replicating RR7's resolution logic.
+ * Returns the user's file if it exists, otherwise the RR7 default.
+ */
+function findEntryClientPath(appDirectory: string): {
+  path: string;
+  isDefault: boolean;
+} {
+  const exts = [".js", ".jsx", ".ts", ".tsx", ".mjs", ".mts"];
+  for (const ext of exts) {
+    const p = resolve(appDirectory, `entry.client${ext}`);
+    if (existsSync(p)) return { path: p, isDefault: false };
+  }
+  // Fall back to RR7's default entry.client
+  const require = createRequire(import.meta.url);
+  const rrDevPkgPath = require.resolve("@react-router/dev/package.json");
+  const defaultPath = resolve(
+    dirname(rrDevPkgPath),
+    "dist",
+    "config",
+    "defaults",
+    "entry.client.tsx"
+  );
+  return { path: defaultPath, isDefault: true };
+}
+
 export function extensibilityPlugin(
   options: ExtensibilityPluginOptions
 ): Plugin[] {
   const { extensions } = options;
   let appDirectory: string;
+  let entryClientInfo: { path: string; isDefault: boolean };
+  const hasClientHooks = extensions.some(
+    (ext) => ext.clientHooks?.beforeHydration || ext.clientHooks?.afterHydration
+  );
 
   return [
     {
@@ -65,6 +100,7 @@ export function extensibilityPlugin(
       config(userConfig) {
         const root = userConfig.root ?? process.cwd();
         appDirectory = resolve(root, "app");
+        entryClientInfo = findEntryClientPath(appDirectory);
 
         return {
           ssr: {
@@ -92,6 +128,15 @@ export function extensibilityPlugin(
         // Skip ?ext-original — let Vite load the real file
         if (id.includes(EXT_ORIGINAL_QUERY)) {
           return null;
+        }
+
+        // Proxy entry.client — wrap hydration with extension before/after hooks
+        if (hasClientHooks && id === entryClientInfo.path) {
+          return generateEntryClientProxy(
+            entryClientInfo.path,
+            entryClientInfo.isDefault,
+            extensions
+          );
         }
 
         // Proxy root.tsx — inject extension metadata context + global middleware

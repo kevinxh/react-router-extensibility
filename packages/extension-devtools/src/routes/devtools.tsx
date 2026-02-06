@@ -37,6 +37,7 @@ const mwTag = tag("#fef3c7", "#92400e", "#fcd34d");
 const dimTag = tag("#f5f5f5", "#999", "#e0e0e0");
 const ctxTag = tag("#fce7f3", "#9d174d", "#f9a8d4");
 const actionTag = tag("#ede9fe", "#6d28d9", "#c4b5fd");
+const clientTag = tag("#dbeafe", "#1e40af", "#93c5fd");
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -211,6 +212,21 @@ function ExtensionCard({
           ext.actions.map((a) => (
             <span key={a.name} style={actionTag} title={a.description}>{a.name}</span>
           ))
+        ) : (
+          <Dim>None</Dim>
+        )}
+      </Row>
+
+      <Row label="Client Hooks">
+        {ext.clientHooks?.beforeHydration || ext.clientHooks?.afterHydration ? (
+          <>
+            {ext.clientHooks.beforeHydration && (
+              <span style={clientTag}>beforeHydration</span>
+            )}
+            {ext.clientHooks.afterHydration && (
+              <span style={clientTag}>afterHydration</span>
+            )}
+          </>
         ) : (
           <Dim>None</Dim>
         )}

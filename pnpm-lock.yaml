@@ -111,6 +111,19 @@ importers:
         specifier: ^5.9.2
         version: 5.9.3
 
+  packages/extension-google-analytics:
+    dependencies:
+      extensibility-sdk:
+        specifier: workspace:*
+        version: link:../extensibility-sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^22
+        version: 22.19.9
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
   packages/extension-logging:
     dependencies:
       extensibility-sdk:
@@ -156,6 +169,9 @@ importers:
       extension-devtools:
         specifier: workspace:*
         version: link:../extension-devtools
+      extension-google-analytics:
+        specifier: workspace:*
+        version: link:../extension-google-analytics
       extension-logging:
         specifier: workspace:*
         version: link:../extension-logging
