@@ -2,6 +2,7 @@ import type { Route } from "./+types/home";
 import { Link } from "react-router";
 import { getExtensionContext } from "extensibility-sdk/context";
 import type { AuthContextValue } from "extension-auth/types";
+import { getAllProducts } from "../data/products";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -12,11 +13,11 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ context }: Route.LoaderArgs) {
   const auth = getExtensionContext<AuthContextValue>(context, "extension-auth");
-  return { currentUser: auth?.currentUser ?? null };
+  return { currentUser: auth?.currentUser ?? null, products: getAllProducts() };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { currentUser } = loaderData;
+  const { currentUser, products } = loaderData;
 
   return (
     <>
@@ -75,7 +76,31 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <h1 className="text-5xl font-bold text-gray-900 text-center">
             Extensibility Demo
           </h1>
+
           <div className="flex flex-col gap-4 w-full max-w-md px-4">
+            <div className="text-sm font-medium text-gray-500 text-center">Products</div>
+            {products.map((p) => (
+              <Link
+                key={p.slug}
+                to={`/product/${p.slug}`}
+                className="block text-center text-lg font-medium text-gray-800 hover:text-blue-700 border border-gray-200 rounded-2xl p-5 hover:bg-gray-50 transition-colors"
+              >
+                {p.name}
+                <span className="block text-sm text-gray-400">${p.price.toFixed(2)}</span>
+              </Link>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-4 w-full max-w-md px-4">
+            <div className="text-sm font-medium text-gray-500 text-center">Extensions</div>
+            <Link
+              to="/stores"
+              className="block text-center text-xl font-medium text-blue-700 hover:text-blue-900 border border-gray-200 rounded-2xl p-6 hover:bg-gray-50 transition-colors"
+            >
+              <span className="text-sm text-gray-400">(extension-bopis)</span>
+              <br />
+              Store Finder
+            </Link>
             <Link
               to="/about"
               className="block text-center text-xl font-medium text-blue-700 hover:text-blue-900 border border-gray-200 rounded-2xl p-6 hover:bg-gray-50 transition-colors"

@@ -13,6 +13,7 @@
     "@react-router/serve": "7.12.0",
     "extension-about-page": "workspace:*",
     "extension-auth": "workspace:*",
+    "extension-bopis": "workspace:*",
     "extension-devtools": "workspace:*",
     "extension-logging": "workspace:*",
     "extensibility-sdk": "workspace:*",
